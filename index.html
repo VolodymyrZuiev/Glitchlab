@@ -513,6 +513,7 @@ const SCHEMA=[
 const DEF={seed:1337};
 const PARAMS={};
 SCHEMA.forEach(sec=>{if(sec.on){DEF[sec.on[0]]=sec.on[1];PARAMS[sec.on[0]]={k:sec.on[0],t:'chk',d:sec.on[1]}}sec.params.forEach(p=>{DEF[p.k]=p.d;PARAMS[p.k]=p})});
+DEF['rg.layout']='';
 let S={...DEF};
 
 const FACTORY=[
@@ -973,21 +974,25 @@ function buildOverlay(W,H,time,ns){
   // lens / filter boxes
   if(S['rg.on']&&S['rg.count']>0&&pts.length){
     const[clean,ck]=adjustStage(W,H,ns);const sel=pickPoints(pts,S['rg.pick'],S['rg.count'],S['rg.min']*.8,'region');
-    const fxl=FX.map(f=>f[0]).filter(f=>f!=='mixed'),mn=S['rg.min'],mx=Math.max(mn,S['rg.max']);
+    const fxl=FX.map(f=>f[0]).filter(f=>f!=='mixed'),mn=S['rg.min'],mx=Math.max(mn,S['rg.max']),lay=rgMap();
     if(RGCACHE.size>80)RGCACHE.clear();
-    for(const p of sel){const r1=hash2(p.id,S.seed^0x91),r2=hash2(p.id,S.seed^0x92),r3=hash2(p.id,S.seed^0x93);
-      const s=lerp(mn,mx,r1)*u,bw=Math.min(W,s*(1+(r2-.5)*.6)),bh=Math.min(H,s*(1-(r2-.5)*.6)),px=p.x*W,py=p.y*H;
-      const od=S['rg.offset']*s*1.2,oa=r3*TAU;const cx=clamp(px+Math.cos(oa)*od,bw/2,W-bw/2),cy=clamp(py+Math.sin(oa)*od,bh/2,H-bh/2);
+    sel.forEach((p,bi)=>{const r1=hash2(p.id,S.seed^0x91),r2=hash2(p.id,S.seed^0x92),r3=hash2(p.id,S.seed^0x93);
+      const ssz=lerp(mn,mx,r1)*u,abw=Math.min(W,ssz*(1+(r2-.5)*.6)),abh=Math.min(H,ssz*(1-(r2-.5)*.6)),px0=p.x*W,py0=p.y*H;
+      const od=S['rg.offset']*ssz*1.2,oa=r3*TAU;const manual=lay[bi];
+      let bw=abw,bh=abh,cx=clamp(px0+Math.cos(oa)*od,abw/2,W-abw/2),cy=clamp(py0+Math.sin(oa)*od,abh/2,H-abh/2);
+      if(manual){bw=clamp(manual.w*W,8,W*1.5);bh=clamp(manual.h*H,8,H*1.5);cx=manual.x*W+bw/2;cy=manual.y*H+bh/2}
+      const px=manual?cx:px0,py=manual?cy:py0;
       const fx=S['rg.effect']==='mixed'?fxl[Math.floor(hash2(p.id,S.seed^0x94)*fxl.length)]:S['rg.effect'];
       const key=[ns,W,H,ck,fx,px|0,py|0,bw|0,bh|0,S['rg.zoom'],S['rg.cell'],S['rg.gradA'],S['rg.gradB'],S.seed].join('|');
-      let cv=RGCACHE.get(key);if(!cv){cv=regionCanvas(fx,clean,px,py,bw,bh,W,H,u,p.id);RGCACHE.set(key,cv)}
-      const x=cx-bw/2,y=cy-bh/2;imgs.push({x,y,w:bw,h:bh,cv});
-      if(S['rg.border'])add({k:'path',p:rectPts(x,y,bw,bh),close:true,g:'s',c:'p',L:'regions'});
-      if(S['rg.handles'])handles(prims,x,y,bw,bh,(3+S['st.width'])*u,'p','regions');
-      const dx=px-cx,dy=py-cy;if(Math.abs(dx)>bw/2||Math.abs(dy)>bh/2){const t=Math.min(bw/2/Math.max(1e-6,Math.abs(dx)),bh/2/Math.max(1e-6,Math.abs(dy)));
-        add({k:'path',p:[cx+dx*t,cy+dy*t,px,py],g:'l',c:'p',a:.9,L:'regions'});add({k:'circ',x:px,y:py,r:2.6*u,c:'p',L:'regions'})}
+      let cv2=RGCACHE.get(key);if(!cv2){cv2=regionCanvas(fx,clean,px,py,bw,bh,W,H,u,p.id);RGCACHE.set(key,cv2)}
+      const x=cx-bw/2,y=cy-bh/2;const im={x,y,w:bw,h:bh,cv:cv2,boxi:bi};if(manual)im.lock=1;imgs.push(im);
+      const put=o=>{if(manual)o.lock=1;add(o)};
+      if(S['rg.border']||manual)put({k:'path',p:rectPts(x,y,bw,bh),close:true,g:'s',c:'p',L:'regions'});
+      if(S['rg.handles']){const n0=prims.length;handles(prims,x,y,bw,bh,(3+S['st.width'])*u,'p','regions');if(manual)for(let k=n0;k<prims.length;k++)prims[k].lock=1}
+      if(!manual){const dx=px0-cx,dy=py0-cy;if(Math.abs(dx)>bw/2||Math.abs(dy)>bh/2){const t=Math.min(bw/2/Math.max(1e-6,Math.abs(dx)),bh/2/Math.max(1e-6,Math.abs(dy)));
+        add({k:'path',p:[cx+dx*t,cy+dy*t,px0,py0],g:'l',c:'p',a:.9,L:'regions'});add({k:'circ',x:px0,y:py0,r:2.6*u,c:'p',L:'regions'})}}
       if(S['rg.label']){let s2=FX_LABEL[fx]+(fx==='zoom'?S['rg.zoom'].toFixed(1):'');if(S['lb.upper'])s2=s2.toUpperCase();const ts=lsz*.9;
-        const below=y+bh+ts*1.5<H;add(textPrim(s2,x,below?y+bh+ts*1.3:y-ts*.5,ts,{c:'p',L:'regions'}))}}}
+        const below=y+bh+ts*1.5<H;put(textPrim(s2,x,below?y+bh+ts*1.3:y-ts*.5,ts,{c:'p',L:'regions'}))}})}
   // labels
   if(S['lb.on']){const off=S['lb.offset']*u,pr=S['lb.prob'],c=colKey(S['lb.color']);
     for(const p of pts){if(hash2(p.id,S.seed^0xabc)>=pr)continue;let s=labelText(S['lb.type'],p,1);if(S['lb.upper'])s=s.toUpperCase();
@@ -1010,14 +1015,15 @@ function buildOverlay(W,H,time,ns){
       add({k:'circ',x:cx,y:cy,r:1.6*u,fill:true,c:S['hud.mark'],L:'hud'})}}
   // displacement of vectors
   if(S['wp.on']&&S['wp.target']!=='image'&&S['wp.amp']>0){const f=makeWarp(W,H,time),seg=10*u;
-    for(const p of prims){
+    for(const p of prims){if(p.lock)continue;
       if(p.k==='path'){const a=p.p.slice();if(p.close)a.push(a[0],a[1]);const o=[];
         for(let i=0;i+2<a.length;i+=2){const x0=a[i],y0=a[i+1],x1=a[i+2],y1=a[i+3],n=Math.max(1,Math.min(200,Math.ceil(Math.hypot(x1-x0,y1-y0)/seg)));
           for(let s=0;s<n;s++){const q=f(x0+(x1-x0)*s/n,y0+(y1-y0)*s/n);o.push(q[0],q[1])}}
         const q=f(a[a.length-2],a[a.length-1]);o.push(q[0],q[1]);p.p=o}
       else if(p.k==='circ'||p.k==='text'||p.k==='ell'){const q=f(p.x,p.y);p.x=q[0];p.y=q[1]}
       else if(p.k==='rrect'){const q=f(p.x+p.w/2,p.y+p.h/2);p.x=q[0]-p.w/2;p.y=q[1]-p.h/2}}
-    for(const im of imgs){const q=f(im.x+im.w/2,im.y+im.h/2);im.x=q[0]-im.w/2;im.y=q[1]-im.h/2}}
+    for(const im of imgs){if(im.lock)continue;const q=f(im.x+im.w/2,im.y+im.h/2);im.x=q[0]-im.w/2;im.y=q[1]-im.h/2}}
+  if(ns==='P')RGLAY=imgs.filter(im=>im.boxi!=null).map(im=>({i:im.boxi,x:im.x/W,y:im.y/H,w:im.w/W,h:im.h/H}));
   return{prims,imgs,u,edges:edgeCount}}
 
 /* ============================== rasterize display list ============================== */
@@ -1075,7 +1081,8 @@ function doRender(now){
     if(COMPARE){g.globalCompositeOperation='source-over';g.globalAlpha=1;g.drawImage(IMG.el,0,0,W,H)}
     else{ov=renderComposite(cv,W,H,{ns:'P',time:animT});
       if(SHOWMAP){g.save();g.globalAlpha=.88;g.imageSmoothingEnabled=true;g.fillStyle='rgba(0,0,0,.55)';g.fillRect(0,0,W,H);g.drawImage(getHeat(),0,0,W,H);g.restore()}
-      if(SHOWPTS||SHOWMAP){g.fillStyle=SHOWMAP?'#38f0ff':'#ff2d6f';const pts=getPoints(),s=Math.max(2,Math.min(W,H)/400);for(const p of pts)g.fillRect(p.x*W-s/2,p.y*H-s/2,s,s)}}
+      if(SHOWPTS||SHOWMAP){g.fillStyle=SHOWMAP?'#38f0ff':'#ff2d6f';const pts=getPoints(),s=Math.max(2,Math.min(W,H)/400);for(const p of pts)g.fillRect(p.x*W-s/2,p.y*H-s/2,s,s)}
+      if(rgEditOn())drawRgHandles(g)}
   }catch(e){console.error(e);setState('error','busy')}
   const ms=performance.now()-t0;
   $('#stPrev').textContent=`${W}×${H}`;$('#stPts').textContent=getPoints().length;$('#stEdges').textContent=ov.edges||0;$('#stPrims').textContent=ov.prims.length;$('#stMs').textContent=ms.toFixed(1);
@@ -1083,12 +1090,40 @@ function doRender(now){
   if(animActive())requestRender()}
 function setState(t,cls){$('#stState').textContent=t;$('#stDot').className=cls||''}
 
+/* ============================== lens box editing ============================== */
+let RGLAY=[],RGDRAG=null;const rgParsed={raw:null,val:{}};
+function rgStored(){const raw=S['rg.layout']||'';if(rgParsed.raw!==raw){rgParsed.raw=raw;try{const v=JSON.parse(raw||'{}');rgParsed.val=v&&typeof v==='object'&&!Array.isArray(v)?v:{}}catch(e){rgParsed.val={}}}return rgParsed.val}
+function rgMap(){const m={...rgStored()};if(RGDRAG)m[RGDRAG.i]={x:RGDRAG.x,y:RGDRAG.y,w:RGDRAG.w,h:RGDRAG.h};return m}
+function rgEditOn(){if(!S['rg.on']||!SECEL.regions||!SECEL.regions.classList.contains('open'))return false;const page=SECEL.regions.closest('.tabpage');return !!(page&&page.classList.contains('on'))}
+function rgHit(nx,ny){const px=nx*cv.width,py=ny*cv.height,hs=Math.max(6,9/VIEW.z);
+  for(let n=RGLAY.length-1;n>=0;n--){const b=RGLAY[n],x=b.x*cv.width,y=b.y*cv.height,w=b.w*cv.width,h=b.h*cv.height;
+    const spots=[['nw',x,y],['ne',x+w,y],['sw',x,y+h],['se',x+w,y+h],['n',x+w/2,y],['s',x+w/2,y+h],['w',x,y+h/2],['e',x+w,y+h/2]];
+    for(const[mode,cx,cy]of spots)if(Math.hypot(px-cx,py-cy)<=hs)return{i:b.i,mode};
+    if(py>y-hs&&py<y+hs&&px>x&&px<x+w)return{i:b.i,mode:'n'};
+    if(py>y+h-hs&&py<y+h+hs&&px>x&&px<x+w)return{i:b.i,mode:'s'};
+    if(px>x-hs&&px<x+hs&&py>y&&py<y+h)return{i:b.i,mode:'w'};
+    if(px>x+w-hs&&px<x+w+hs&&py>y&&py<y+h)return{i:b.i,mode:'e'};
+    if(px>=x&&px<=x+w&&py>=y&&py<=y+h)return{i:b.i,mode:'move'}}
+  return null}
+function rgCursor(mode){return{move:'move',n:'ns-resize',s:'ns-resize',e:'ew-resize',w:'ew-resize',nw:'nwse-resize',se:'nwse-resize',ne:'nesw-resize',sw:'nesw-resize'}[mode]||''}
+function rgApplyDrag(nx,ny){const d=RGDRAG;if(!d)return;let x=d.ox,y=d.oy,w=d.ow,h=d.oh;const dx=nx-d.px,dy=ny-d.py,mode=d.mode;
+  if(mode==='move'){x+=dx;y+=dy}else{if(mode.includes('e'))w+=dx;if(mode.includes('s'))h+=dy;if(mode.includes('w')){x+=dx;w-=dx}if(mode.includes('n')){y+=dy;h-=dy}}
+  const mw=16/cv.width,mh=16/cv.height;if(w<mw){if(mode.includes('w'))x-=mw-w;w=mw}if(h<mh){if(mode.includes('n'))y-=mh-h;h=mh}
+  d.x=clamp(x,-.4,1.2);d.y=clamp(y,-.4,1.2);d.w=Math.min(w,1.6);d.h=Math.min(h,1.6)}
+function rgSaveMap(m){setParam('rg.layout',JSON.stringify(m))}
+function drawRgHandles(g){const hs=Math.max(4,8/VIEW.z);g.save();g.lineWidth=Math.max(1,1.25/VIEW.z);
+  for(const b of RGLAY){const x=b.x*cv.width,y=b.y*cv.height,w=b.w*cv.width,h=b.h*cv.height;g.strokeStyle='#38f0ff';g.strokeRect(x,y,w,h);g.fillStyle='#0c0d0f';
+    for(const[cx,cy]of[[x,y],[x+w,y],[x,y+h],[x+w,y+h],[x+w/2,y],[x+w/2,y+h],[x,y+h/2],[x+w,y+h/2]]){g.fillRect(cx-hs/2,cy-hs/2,hs,hs);g.strokeRect(cx-hs/2,cy-hs/2,hs,hs)}}
+  g.restore()}
+
 /* ============================== viewport ============================== */
 const VIEW={z:1,x:0,y:0,fit:true};
 function fitView(){const r=view.getBoundingClientRect();const W=cv.width,H=cv.height;const z=Math.min((r.width-48)/W,(r.height-48)/H);VIEW.z=Math.max(.02,z);VIEW.x=(r.width-W*VIEW.z)/2;VIEW.y=(r.height-H*VIEW.z)/2;VIEW.fit=true;applyView()}
 function applyView(){cv.style.transform=`translate(${VIEW.x}px,${VIEW.y}px) scale(${VIEW.z})`;cv.style.imageRendering=VIEW.z>2?'pixelated':'auto';$('#stZoom').textContent=Math.round(VIEW.z*100)+'%'}
 function zoomAt(mx,my,z2){z2=clamp(z2,.03,24);VIEW.x=mx-(mx-VIEW.x)*(z2/VIEW.z);VIEW.y=my-(my-VIEW.y)*(z2/VIEW.z);VIEW.z=z2;VIEW.fit=false;applyView()}
-view.addEventListener('wheel',e=>{e.preventDefault();const r=view.getBoundingClientRect();const k=Math.exp(-(e.deltaMode?e.deltaY*30:e.deltaY)*.0015*(e.ctrlKey?2.5:1));zoomAt(e.clientX-r.left,e.clientY-r.top,VIEW.z*k)},{passive:false});
+view.addEventListener('wheel',e=>{e.preventDefault();
+  if(rgEditOn()&&!e.altKey){const hit=rgHit(...toImg(e));if(hit){const b=RGLAY.find(q=>q.i===hit.i);if(b){const k=Math.exp(-(e.deltaMode?e.deltaY*30:e.deltaY)*.0012);const mw=16/cv.width,mh=16/cv.height;let w=clamp(b.w*k,mw,1.6),h=clamp(b.h*k,mh,1.6);if(e.shiftKey){h=b.h}const m={...rgStored()};m[hit.i]={x:b.x+b.w/2-w/2,y:b.y+b.h/2-h/2,w,h};rgSaveMap(m);return}}}
+  const r=view.getBoundingClientRect();const k=Math.exp(-(e.deltaMode?e.deltaY*30:e.deltaY)*.0015*(e.ctrlKey?2.5:1));zoomAt(e.clientX-r.left,e.clientY-r.top,VIEW.z*k)},{passive:false});
 let pan=null;
 function toImg(e){const r=view.getBoundingClientRect();return[(e.clientX-r.left-VIEW.x)/(VIEW.z*cv.width),(e.clientY-r.top-VIEW.y)/(VIEW.z*cv.height)]}
 view.addEventListener('pointerdown',e=>{if(e.button===0&&e.altKey&&IMG){const[nx,ny]=toImg(e);if(nx<0||nx>1||ny<0||ny>1)return;
@@ -1098,11 +1133,15 @@ view.addEventListener('pointerdown',e=>{if(e.button===0&&e.altKey&&IMG){const[nx
     setParam('det.color',hex);if(S['det.source']!=='color'&&S['det.source']!=='hue')setParam('det.source','color');toast('Detect color → '+hex);return}
   if(e.button===0&&e.shiftKey&&IMG){const[nx,ny]=toImg(e);if(nx>=0&&nx<=1&&ny>=0&&ny<=1){
     setParam('ob.auto','manual');setParam('ob.cx',+nx.toFixed(3));setParam('ob.cy',+ny.toFixed(3));if(!S['ob.on'])setParam('ob.on',true);toast('Orbit center → '+nx.toFixed(2)+', '+ny.toFixed(2))}return}
+  if(e.button===0&&!e.altKey&&!e.shiftKey&&rgEditOn()){const[nx,ny]=toImg(e);const hit=rgHit(nx,ny);if(hit){const b=RGLAY.find(q=>q.i===hit.i);RGDRAG={i:hit.i,mode:hit.mode,px:nx,py:ny,ox:b.x,oy:b.y,ow:b.w,oh:b.h,x:b.x,y:b.y,w:b.w,h:b.h};view.setPointerCapture(e.pointerId);view.style.cursor=rgCursor(hit.mode);return}}
   if(e.button===0||e.button===1){pan={x:e.clientX,y:e.clientY,vx:VIEW.x,vy:VIEW.y};view.setPointerCapture(e.pointerId);view.classList.add('panning')}});
-view.addEventListener('pointermove',e=>{if(pan){VIEW.x=pan.vx+e.clientX-pan.x;VIEW.y=pan.vy+e.clientY-pan.y;VIEW.fit=false;applyView()}
-  if(IMG){const[nx,ny]=toImg(e);$('#stXY').textContent=(nx>=0&&nx<=1&&ny>=0&&ny<=1)?`x ${Math.round(nx*IMG.w)}  y ${Math.round(ny*IMG.h)}`:'x — y —'}});
-view.addEventListener('pointerup',()=>{pan=null;view.classList.remove('panning')});
-view.addEventListener('dblclick',fitView);
+view.addEventListener('pointermove',e=>{
+  if(RGDRAG){rgApplyDrag(...toImg(e));view.style.cursor=rgCursor(RGDRAG.mode);requestRender();return}
+  if(pan){VIEW.x=pan.vx+e.clientX-pan.x;VIEW.y=pan.vy+e.clientY-pan.y;VIEW.fit=false;applyView()}
+  if(IMG){const[nx,ny]=toImg(e);$('#stXY').textContent=(nx>=0&&nx<=1&&ny>=0&&ny<=1)?`x ${Math.round(nx*IMG.w)}  y ${Math.round(ny*IMG.h)}`:'x — y —';
+    if(!pan&&rgEditOn()){const hit=rgHit(nx,ny);view.style.cursor=hit?rgCursor(hit.mode):''}}});
+view.addEventListener('pointerup',()=>{if(RGDRAG){const m={...rgStored()};m[RGDRAG.i]={x:+RGDRAG.x.toFixed(4),y:+RGDRAG.y.toFixed(4),w:+RGDRAG.w.toFixed(4),h:+RGDRAG.h.toFixed(4)};RGDRAG=null;rgSaveMap(m)}pan=null;view.classList.remove('panning')});
+view.addEventListener('dblclick',e=>{if(rgEditOn()){const hit=rgHit(...toImg(e));if(hit){const m={...rgStored()};delete m[hit.i];rgSaveMap(m);toast('Box reset');return}}fitView()});
 window.addEventListener('resize',()=>{if(VIEW.fit)fitView()});
 
 /* ============================== UI builder ============================== */
@@ -1294,6 +1333,9 @@ function toast(msg,type){const t=document.createElement('div');t.className='toas
 /* ============================== wiring ============================== */
 function init(){
   buildUI();
+  const rgBody=SECEL.regions&&SECEL.regions.querySelector('.sec-b');
+  if(rgBody){const h=document.createElement('div');h.className='hint2';h.textContent='Секция открыта — тащите боксы на холсте. Стороны: ширина и высота, углы: оба размера, колесо: масштаб. Двойной клик по боксу сбрасывает его.';
+    const b=document.createElement('button');b.className='btn wide';b.style.marginTop='6px';b.textContent='Reset box positions';b.onclick=()=>{RGDRAG=null;rgSaveMap({});toast('Box positions reset')};rgBody.append(h,b)}
   try{UI={...UI,...JSON.parse(localStorage.getItem(LS_UI)||'{}')}}catch(e){}
   for(const id in UI.open)if(SECEL[id]&&SCHEMA.find(s=>s.id===id)?.tab!=='left')SECEL[id].classList.toggle('open',!!UI.open[id]);
   setTab(UI.tab||'ov');
