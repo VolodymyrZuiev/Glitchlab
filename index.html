@@ -250,7 +250,7 @@ kbd{background:#24282e;border:1px solid #3a4047;border-bottom-width:2px;border-r
     <canvas id="cv" width="10" height="10"></canvas>
     <div id="drop">DROP IMAGE</div>
     <div id="cmpTag">ORIGINAL</div>
-    <div id="hint">Wheel: zoom · Drag: pan · Alt+Click: pick detect color · Shift+Click: orbit center · Dbl-click: fit</div>
+    <div id="hint">Тяни бокс или линию · пустое место — панорама · двойной клик по элементу — вернуть · Esc — сбросить все сдвиги · колесо — масштаб</div>
   </main>
 
   <aside id="right" class="panel">
@@ -292,6 +292,9 @@ kbd{background:#24282e;border:1px solid #3a4047;border-bottom-width:2px;border-r
     <tr><td><kbd>Space</kbd></td><td>Play / stop таймлайна</td></tr>
     <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Кадр назад / вперёд (Shift — на 10)</td></tr>
     <tr><td>Shift + клик по холсту</td><td>Центр орбит (Orbit)</td></tr>
+    <tr><td>Тянуть элемент</td><td>Сдвинуть бокс, маркер, линию, подпись, орбиту или HUD. Пустое место — панорама</td></tr>
+    <tr><td>Двойной клик по элементу</td><td>Вернуть этот элемент на место</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>Сбросить все ручные сдвиги. Новый seed и детекция сбрасывают их сами</td></tr>
   </table>
   <p>Слайдеры: тяните влево/вправо (Shift — точная настройка), клик — ввод числа, двойной клик по названию — сброс. Кубик ⚄ в заголовке секции рандомизирует её параметры, ↺ — сбрасывает. Все размеры заданы в единицах ‰ от короткой стороны кадра, поэтому превью и экспорт в полном разрешении совпадают.</p>
   <div style="text-align:right;margin-top:10px"><button class="btn pri" id="mClose">OK</button></div>
@@ -334,8 +337,9 @@ const COL=(k,l,d,x)=>({k,l,t:'col',d,...x});
 const TXT=(k,l,d,x)=>({k,l,t:'txt',d,...x});
 const SHAPES=[['cross','Cross +'],['xcross','Cross ×'],['circle','Circle (filled)'],['ring','Ring (hollow)'],['square','Square'],['dot','Dot'],['target','Target'],['bracket','Corner brackets'],['diamond','Diamond'],['triangle','Triangle'],['mixed','Mixed']];
 const LABELS=[['coords','Coordinates'],['blob','Blob ID'],['words','Words'],['files','File names'],['hex','Hex'],['index','Index #'],['lum','Luma / edge'],['mixed','Mixed']];
-const FX=[['mixed','Mixed (random)'],['zoom','Zoom / loupe'],['invert','Invert'],['pixelate','Mosaic'],['halftone','Halftone'],['threshold','Threshold + grain'],['posterize','Posterize'],['rgb','RGB split'],['gradient','Gradient map'],['mono','Mono contrast'],['xray','X-Ray'],['glass','Glass blocks']];
-const FX_LABEL={zoom:'zoom.loupe ×',invert:'invert (adjustment)',pixelate:'mosaic (pixelate)',halftone:'halftone pattern "dot"',threshold:'threshold + grain',posterize:'posterize · 4 levels',rgb:'rgb split (channels)',gradient:'gradient map + grain',mono:'mono / high contrast',xray:'object.xray',glass:'glass "blocks"'};
+const FX=[['mixed','Mixed (random)'],['zoom','Zoom / loupe'],['motion','Motion blur'],['radial','Radial blur'],['defocus','Defocus'],['swirl','Swirl'],['ripple','Ripple'],['liquid','Liquid'],['invert','Invert'],['pixelate','Mosaic'],['halftone','Halftone'],['threshold','Threshold + grain'],['posterize','Posterize'],['rgb','RGB split'],['gradient','Gradient map'],['mono','Mono contrast'],['xray','X-Ray'],['glass','Glass blocks']];
+const FX_LABEL={zoom:'zoom.loupe ×',motion:'motion blur',radial:'radial blur',defocus:'defocus',swirl:'swirl',ripple:'ripple',liquid:'liquid displace',invert:'invert (adjustment)',pixelate:'mosaic (pixelate)',halftone:'halftone pattern "dot"',threshold:'threshold + grain',posterize:'posterize · 4 levels',rgb:'rgb split (channels)',gradient:'gradient map + grain',mono:'mono / high contrast',xray:'object.xray',glass:'glass "blocks"'};
+const SOFT_FX={motion:1,radial:1,defocus:1,swirl:1,ripple:1,liquid:1};
 const BLENDS=[['source-over','Normal'],['screen','Screen'],['multiply','Multiply'],['difference','Difference'],['overlay','Overlay'],['lighter','Add'],['exclusion','Exclusion'],['color-dodge','Color dodge'],['soft-light','Soft light']];
 const FEATURES=[['luma','Brightness (light areas)'],['dark','Darkness (shadows)'],['edge','Edges / contrast'],['corners','Corners (Harris)'],['detail','Texture / detail'],['sat','Saturation (vivid color)'],['color','Target color'],['hue','Hue (any brightness)'],['red','Red channel'],['green','Green channel'],['blue','Blue channel']];
 const PICK=[['feature','Strongest feature'],['edge','Strongest edges'],['bright','Brightest'],['dark','Darkest'],['random','Random']];
@@ -382,12 +386,12 @@ const SCHEMA=[
  {id:'style',tab:'ov',title:'Style & Blend',open:true,params:[
   COL('st.color','Primary color','#ffffff'),
   COL('st.accent','Accent color','#38f0ff'),
-  R('st.width','Stroke width',1,.1,10,.05),
+  R('st.width','Stroke width',1,.1,10,.05,{h:'Базовая толщина. Stroke в секции умножает её'}),
   CHK('st.dash','Dashed',false),
   SEL('st.dashTarget','Dash applies to','lines',[['lines','Lines only'],['shapes','Shapes only'],['all','Everything']],{show:s=>s['st.dash']}),
   R('st.dashLen','Dash length',6,.5,60,.5,{show:s=>s['st.dash']}),
   R('st.gap','Dash gap',4,.5,60,.5,{show:s=>s['st.dash']}),
-  R('st.opacity','Overlay opacity',.92,0,1,.01),
+  R('st.opacity','Overlay opacity',.92,0,1,.01,{h:'Общая прозрачность. Opacity секции умножается на неё'}),
   SEL('st.blend','Blend mode','source-over',BLENDS),
   R('st.glow','Glow',0,0,30,.5,{h:'Только для растра (PNG)'}),
  ]},
@@ -398,15 +402,20 @@ const SCHEMA=[
   SEL('mk.sizeBy','Size by','none',[['none','—'],['feature','Feature strength'],['bright','Brightness'],['dark','Darkness'],['edge','Edge strength']]),
   R('mk.prob','Coverage',.6,0,1,.01,{h:'Доля точек, получающих фигуру'}),
   R('mk.rot','Random rotation',0,0,1,.01),
+  R('mk.opacity','Opacity',1,0,1,.01,{noRand:true}),
+  R('mk.width','Stroke',1,.15,6,.05,{noRand:true,h:'Множитель к общей толщине'}),
   COL('mk.color','Color','#ffffff'),
  ]},
  {id:'links',tab:'ov',title:'Wireframe / Mesh',on:['ln.on',true],params:[
-  SEL('ln.mode','Connect','nearest',[['nearest','K nearest'],['delaunay','Delaunay triangulation'],['radius','All within radius'],['hub','Hubs (tracking)'],['chain','Chain path']]),
-  R('ln.maxDist','Max distance',150,5,1500,1,{h:'Лимит длины линии, ‰ короткой стороны'}),
+  SEL('ln.source','Draw between','points',[['points','All detected points'],['boxes','Tracking boxes only']],{noRand:true,h:'Boxes — линии только между боксами. Count, Pick и Spacing берутся из Tracking Boxes. Поставь Random drop на 1, чтобы ничего не выкидывалось.'}),
+  SEL('ln.mode','Connect','nearest',[['nearest','K nearest'],['delaunay','Delaunay triangulation'],['radius','All within radius'],['hub','Hubs (tracking)'],['chain','Chain path'],['star','All to strongest']]),
+  R('ln.maxDist','Max distance',150,5,2000,1,{h:'Длиннее этого линия не рисуется, ‰ короткой стороны'}),
   R('ln.k','Neighbors',2,1,8,1,{show:isMode('ln.mode','nearest')}),
   R('ln.hubs','Hub count',3,1,12,1,{show:isMode('ln.mode','hub')}),
-  R('ln.prob','Keep ratio',.85,0,1,.01),
-  R('ln.alpha','Line opacity',.8,0,1,.01),
+  SEL('ln.hubPick','Hub choice','random',[['random','Random'],['feature','Strongest']],{show:isMode('ln.mode','hub'),noRand:true}),
+  R('ln.prob','Random drop',.85,0,1,.01,{h:'1 = оставить все линии. Меньше — случайно выкидывает связи'}),
+  R('ln.alpha','Opacity',.8,0,1,.01,{noRand:true}),
+  R('ln.width','Stroke',1,.15,6,.05,{noRand:true,h:'Множитель к общей толщине'}),
   CHK('ln.nodes','Nodes',true),
   SEL('ln.nodeShape','Node shape','circle',[['circle','Circle'],['box','Box']],{show:s=>s['ln.nodes']}),
   R('ln.nodeSize','Node size',2.5,.5,12,.5,{show:s=>s['ln.nodes']}),
@@ -420,6 +429,7 @@ const SCHEMA=[
   SEL('lb.box','Background','none',[['none','None'],['outline','Outline'],['fill','Filled tag']]),
   SEL('lb.form','Tag shape','box',[['box','Box'],['pill','Pill'],['circle','Circle']],{show:s=>s['lb.box']!=='none'}),
   CHK('lb.upper','Uppercase',false),
+  R('lb.opacity','Opacity',1,0,1,.01,{noRand:true}),
   COL('lb.color','Color','#ffffff'),
   TXT('lb.words','Words list',DEFAULT_WORDS,{h:'Через запятую или с новой строки'}),
  ]},
@@ -427,13 +437,22 @@ const SCHEMA=[
   SEL('tb.shape','Shape','box',[['box','Boxes'],['circle','Circles'],['rounded','Rounded'],['mixed','Mixed']]),
   R('tb.count','Count',6,0,80,1),
   SEL('tb.pick','Pick points','feature',PICK),
+  R('tb.sep','Spacing',0,0,400,1,{noRand:true,h:'Мин. расстояние между боксами, ‰. 0 = от минимального размера'}),
+  R('tb.rank','Rank jitter',.25,0,1,.01,{noRand:true,h:'0 = строго самые сильные точки, без перемешивания'}),
+  SEL('tb.sizeBy','Size','random',[['random','Random in range'],['even','Even'],['feature','By feature'],['bright','By brightness'],['edge','By edge']],{noRand:true}),
   R('tb.min','Min size',30,4,600,1),
   R('tb.max','Max size',140,4,900,1),
-  R('tb.aspect','Aspect variance',.3,0,1,.01),
+  R('tb.var','Size variance',1,0,1,.01,{noRand:true,show:s=>s['tb.sizeBy']==='random',h:'0 = все боксы одного размера'}),
+  R('tb.aspect','Aspect variance',.3,0,1,.01,{h:'0 = квадрат или круг'}),
   SEL('tb.ltype','Label','coords',[['none','None'],...LABELS]),
   CHK('tb.handles','Corner handles',false),
   CHK('tb.cross','Center cross',false),
-  CHK('tb.lines','Connect',false),
+  CHK('tb.lines','Link boxes',false,{h:'Отдельные линии только между этими боксами, без случайного выкидывания'}),
+  SEL('tb.link','Link mode','nearest',[['nearest','Each to nearest'],['chain','One path'],['delaunay','Triangulation'],['star','All to strongest']],{show:s=>s['tb.lines'],noRand:true}),
+  R('tb.linkK','Neighbors',1,1,6,1,{show:s=>s['tb.lines']&&s['tb.link']==='nearest',noRand:true}),
+  R('tb.linkDist','Link distance',900,10,2000,5,{show:s=>s['tb.lines'],noRand:true,h:'Длиннее этого боксы не соединяются'}),
+  R('tb.opacity','Opacity',1,0,1,.01,{noRand:true}),
+  R('tb.width','Stroke',1,.15,6,.05,{noRand:true,h:'Множитель к общей толщине'}),
   COL('tb.color','Color','#38f0ff'),
  ]},
  {id:'orbit',tab:'ov',title:'Orbits / Radial Chart',on:['ob.on',false],params:[
@@ -449,6 +468,8 @@ const SCHEMA=[
   R('ob.rot','Rotation',0,0,360,1),
   R('ob.rays','Rays',12,0,72,1),
   R('ob.rayLen','Ray length',700,0,2500,5),
+  R('ob.opacity','Opacity',1,0,1,.01,{noRand:true}),
+  R('ob.width','Stroke',1,.15,6,.05,{noRand:true,h:'Множитель к общей толщине'}),
   COL('ob.color','Line color','#ffffff'),
   COL('ob.mark','Ticks & center','#38f0ff'),
   CHK('ob.dashRays','Dashed rays',true),
@@ -456,6 +477,8 @@ const SCHEMA=[
   CHK('ob.labels','Orbit labels',true),
  ]},
  {id:'hud',tab:'ov',title:'HUD / Frame',on:['hud.on',true],params:[
+  R('hud.opacity','Opacity',1,0,1,.01,{noRand:true}),
+  R('hud.width','Stroke',1,.15,6,.05,{noRand:true,h:'Множитель к общей толщине'}),
   COL('hud.color','Color','#ffffff'),
   COL('hud.mark','Crosshair','#38f0ff'),
   CHK('hud.text','Corner info',true),
@@ -544,9 +567,13 @@ const SCHEMA=[
   R('rg.max','Max size',240,10,900,1),
   R('rg.offset','Box offset',0,0,1.5,.01,{h:'Сдвиг бокса от точки-источника с выносной линией'}),
   R('rg.zoom','Zoom',2,1,8,.1),
-  R('rg.cell','Cell size',6,2,40,.5,{h:'Размер ячейки для mosaic / halftone / glass'}),
+  R('rg.cell','Cell / amount',6,2,40,.5,{h:'Mosaic, halftone, glass — размер ячейки. Motion blur, radial, defocus, swirl, ripple, liquid — сила искажения'}),
+  R('rg.angle','Blur angle',18,-180,180,1,{show:isMode('rg.effect','motion','mixed'),h:'Направление смаза. Только Motion blur'}),
   COL('rg.gradA','Gradient dark','#0b1a6b'),
   COL('rg.gradB','Gradient light','#ffb36b'),
+  COL('rg.color','Border color','#ffffff'),
+  R('rg.opacity','Opacity',1,0,1,.01,{noRand:true}),
+  R('rg.width','Stroke',1,.15,6,.05,{noRand:true,h:'Множитель к общей толщине рамки'}),
   CHK('rg.border','Border',true),
   CHK('rg.handles','Corner handles',true),
   CHK('rg.label','Effect label',true),
@@ -760,22 +787,29 @@ function delaunay(P){
   const out=[],seen=new Set();
   for(const t of T){const es=[[t.a,t.b],[t.b,t.c],[t.c,t.a]];for(const[u,v]of es){if(u>=n||v>=n)continue;const k=ek(u,v);if(!seen.has(k)){seen.add(k);out.push([Math.min(u,v),Math.max(u,v)])}}}
   return out}
-function getEdges(){const pts=getPoints();if(!pts.length)return[];
-  return memo('edges',ptsKey()+'|'+['ln.mode','ln.maxDist','ln.k','ln.hubs','ln.prob'].map(k=>S[k]).join('|'),()=>{
-  const[ax,ay]=aspectUnits();const U=pts.map(p=>[p.x*ax,p.y*ay]);const n=U.length,md2=S['ln.maxDist']**2;const out=[],seen=new Set();
-  const push=(i,j)=>{if(i===j)return;const a=Math.min(i,j),b=Math.max(i,j),k=a*100000+b;if(seen.has(k))return;seen.add(k);out.push([a,b])};
+function connectPoints(pts,mode,maxDist,k,hubs,hubPick){
+  if(!pts||pts.length<2)return[];
+  const[ax,ay]=aspectUnits();const U=pts.map(p=>[p.x*ax,p.y*ay]);const n=U.length,md2=maxDist*maxDist;const out=[],seen=new Set();
+  const push=(i,j)=>{if(i===j||i<0||j<0)return;const a=Math.min(i,j),b=Math.max(i,j),key=a*100000+b;if(seen.has(key))return;seen.add(key);out.push([a,b])};
   const d2=(i,j)=>{const dx=U[i][0]-U[j][0],dy=U[i][1]-U[j][1];return dx*dx+dy*dy};
-  const mode=S['ln.mode'];
-  if(mode==='nearest'){const k=S['ln.k'];for(let i=0;i<n;i++){const best=[];for(let j=0;j<n;j++){if(j===i)continue;const d=d2(i,j);if(d>md2)continue;
-      if(best.length<k||d<best[best.length-1][0]){best.push([d,j]);best.sort((a,b)=>a[0]-b[0]);if(best.length>k)best.pop()}}for(const b of best)push(i,b[1])}}
+  if(mode==='nearest'){const kk=Math.max(1,k|0);for(let i=0;i<n;i++){const best=[];for(let j=0;j<n;j++){if(j===i)continue;const d=d2(i,j);if(d>md2)continue;
+      if(best.length<kk||d<best[best.length-1][0]){best.push([d,j]);best.sort((a,b)=>a[0]-b[0]);if(best.length>kk)best.pop()}}for(const b of best)push(i,b[1])}}
   else if(mode==='radius'){outer:for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){if(d2(i,j)<md2){push(i,j);if(out.length>30000)break outer}}}
   else if(mode==='delaunay'){for(const[a,b]of delaunay(U.slice(0,2500)))if(d2(a,b)<md2)push(a,b)}
-  else if(mode==='hub'){const r=rngFor('hubs');const nh=Math.min(n,S['ln.hubs']);const idx=shuffle([...Array(n).keys()],r).slice(0,nh);
+  else if(mode==='hub'){const nh=Math.min(n,Math.max(1,hubs|0));let idx;
+    if(hubPick==='feature')idx=pts.map((p,i)=>({i,s:p.f||0})).sort((a,b)=>b.s-a.s).slice(0,nh).map(o=>o.i);
+    else idx=shuffle([...Array(n).keys()],rngFor('hubs')).slice(0,nh);
     for(let i=0;i<n;i++){let bh=-1,bd=Infinity;for(const h of idx){const d=d2(i,h);if(d<bd){bd=d;bh=h}}if(bh>=0&&bd<md2)push(i,bh)}
     for(let i=0;i+1<idx.length;i++)push(idx[i],idx[i+1])}
+  else if(mode==='star'){let h=0;for(let i=1;i<n;i++)if((pts[i].f||0)>(pts[h].f||0))h=i;for(let i=0;i<n;i++)if(d2(i,h)<md2)push(i,h)}
   else if(mode==='chain'){const vis=new Uint8Array(n);let cur=0;vis[0]=1;for(let s=1;s<n;s++){let bj=-1,bd=Infinity;for(let j=0;j<n;j++)if(!vis[j]){const d=d2(cur,j);if(d<bd){bd=d;bj=j}}
       if(bj<0)break;vis[bj]=1;if(bd<md2)push(cur,bj);cur=bj}}
-  const pr=S['ln.prob'];return pr>=1?out:out.filter(([a,b])=>hash2(a*7919+b,S.seed^0x55aa)<pr)})}
+  return out}
+function getEdges(pts){const list=pts||getPoints();if(list.length<2)return[];
+  const idk=list.map(p=>p.id).join(',');
+  return memo('edges'+list.length,ptsKey()+'|'+idk+'|'+['ln.mode','ln.maxDist','ln.k','ln.hubs','ln.prob','ln.hubPick','ln.source'].map(k=>S[k]).join('|'),()=>{
+    const out=connectPoints(list,S['ln.mode'],S['ln.maxDist'],S['ln.k'],S['ln.hubs'],S['ln.hubPick']);
+    const pr=S['ln.prob'];return pr>=1?out:out.filter(([a,b])=>hash2(a*7919+b,S.seed^0x55aa)<pr)})}
 
 /* ============================== warp ============================== */
 function makeWarp(W,H,time){
@@ -911,7 +945,61 @@ function asciiLayer(W,H,ns,time,gl){
 
 /* ============================== region (lens) boxes ============================== */
 const RGCACHE=new Map();
+function takePatch(src,x,y,w,h,W,H){
+  const x0=Math.max(0,Math.floor(x)),y0=Math.max(0,Math.floor(y));
+  const x1=Math.min(W,Math.ceil(x+w)),y1=Math.min(H,Math.ceil(y+h));
+  const pw=Math.max(1,x1-x0),ph=Math.max(1,y1-y0);
+  const c=mk(pw,ph),g=c.getContext('2d');g.drawImage(src,x0,y0,pw,ph,0,0,pw,ph);
+  return{d:g.getImageData(0,0,pw,ph).data,x0,y0,w:pw,h:ph}}
+function bilerp(P,pw,ph,x,y){
+  if(pw<2||ph<2){const i=(clamp(y|0,0,ph-1)*pw+clamp(x|0,0,pw-1))*4;return[P[i],P[i+1],P[i+2]]}
+  x=clamp(x,0,pw-1.001);y=clamp(y,0,ph-1.001);
+  const x0=x|0,y0=y|0,x1=x0+1,y1=y0+1,tx=x-x0,ty=y-y0,tx1=1-tx,ty1=1-ty;
+  const i00=(y0*pw+x0)*4,i10=(y0*pw+x1)*4,i01=(y1*pw+x0)*4,i11=(y1*pw+y1)*4;
+  const w00=tx1*ty1,w10=tx*ty1,w01=tx1*ty,w11=tx*ty;
+  return[P[i00]*w00+P[i10]*w10+P[i01]*w01+P[i11]*w11,P[i00+1]*w00+P[i10+1]*w10+P[i01+1]*w01+P[i11+1]*w11,P[i00+2]*w00+P[i10+2]*w10+P[i01+2]*w01+P[i11+2]*w11]}
+function boxBlurRGB(src,w,h,r){
+  r=Math.max(1,r|0);const tmp=new Float32Array(w*h*3),out=new Uint8ClampedArray(w*h*4),div=r*2+1;
+  for(let y=0;y<h;y++){let rs=0,gs=0,bs=0;
+    for(let k=-r;k<=r;k++){const x=k<0?0:k>=w?w-1:k,i=(y*w+x)*4;rs+=src[i];gs+=src[i+1];bs+=src[i+2]}
+    for(let x=0;x<w;x++){const o=(y*w+x)*3;tmp[o]=rs/div;tmp[o+1]=gs/div;tmp[o+2]=bs/div;
+      const x0=x-r<0?0:x-r,x1=x+r+1>=w?w-1:x+r+1,i0=(y*w+x0)*4,i1=(y*w+x1)*4;
+      rs+=src[i1]-src[i0];gs+=src[i1+1]-src[i0+1];bs+=src[i1+2]-src[i0+2]}}
+  for(let x=0;x<w;x++){let rs=0,gs=0,bs=0;
+    for(let k=-r;k<=r;k++){const y=k<0?0:k>=h?h-1:k,o=(y*w+x)*3;rs+=tmp[o];gs+=tmp[o+1];bs+=tmp[o+2]}
+    for(let y=0;y<h;y++){const i=(y*w+x)*4;out[i]=rs/div;out[i+1]=gs/div;out[i+2]=bs/div;out[i+3]=255;
+      const y0=y-r<0?0:y-r,y1=y+r+1>=h?h-1:y+r+1,o0=(y0*w+x)*3,o1=(y1*w+x)*3;
+      rs+=tmp[o1]-tmp[o0];gs+=tmp[o1+1]-tmp[o0+1];bs+=tmp[o1+2]-tmp[o0+2]}}
+  return out}
+function softA(i,j,w,h){const ex=(i/Math.max(1,w-1)-.5)*2,ey=(j/Math.max(1,h-1)-.5)*2;return 1-smooth(.55,1.04,Math.sqrt(ex*ex+ey*ey))}
+function distortBox(fx,src,px,py,bw,bh,W,H,u,id){
+  const w=Math.max(2,Math.round(bw)),h=Math.max(2,Math.round(bh)),cell=Math.max(2,S['rg.cell']*u);
+  const maxR=Math.hypot(bw,bh)*.5,ang=S['rg.angle']*Math.PI/180;
+  const pad=fx==='motion'?cell*9:fx==='defocus'?cell*4:fx==='liquid'||fx==='ripple'?cell*3.2:maxR*.35;
+  const P=takePatch(src,px-bw/2-pad,py-bh/2-pad,bw+pad*2,bh+pad*2,W,H);
+  let buf=P.d;
+  if(fx==='defocus'){const rad=Math.max(1,Math.round(cell*1.45));buf=boxBlurRGB(buf,P.w,P.h,rad);buf=boxBlurRGB(buf,P.w,P.h,Math.max(1,Math.round(rad*.55)));buf=boxBlurRGB(buf,P.w,P.h,Math.max(1,Math.round(rad*.3)))}
+  const out=new Uint8ClampedArray(w*h*4);
+  const taps=fx==='motion'?13:fx==='radial'?11:1;
+  const len=cell*8,cs=Math.cos(ang),sn=Math.sin(ang),pull=clamp(S['rg.cell']/26,.05,.7);
+  const turn=(S['rg.cell']/20)*Math.PI,ampR=cell*2.5,ampL=cell*3;
+  for(let j=0;j<h;j++)for(let i=0;i<w;i++){
+    let sx=px-bw/2+(i+.5)/w*bw,sy=py-bh/2+(j+.5)/h*bh;
+    let rr=0,gg=0,bb=0,ws=0;
+    if(fx==='motion'){
+      for(let t=0;t<taps;t++){const u2=t/(taps-1)*2-1,wt=Math.exp(-u2*u2*2.1);const s=bilerp(buf,P.w,P.h,sx+cs*len*u2-P.x0,sy+sn*len*u2-P.y0);rr+=s[0]*wt;gg+=s[1]*wt;bb+=s[2]*wt;ws+=wt}
+    }else if(fx==='radial'){
+      for(let t=0;t<taps;t++){const u2=t/(taps-1),wt=Math.exp(-u2*u2*1.7);const s=bilerp(buf,P.w,P.h,sx+(px-sx)*pull*u2-P.x0,sy+(py-sy)*pull*u2-P.y0);rr+=s[0]*wt;gg+=s[1]*wt;bb+=s[2]*wt;ws+=wt}
+    }else{
+      const dx=sx-px,dy=sy-py,r=Math.hypot(dx,dy)||1,fall=1-smooth(maxR*.12,maxR*.96,r);
+      if(fx==='swirl'){const a=turn*fall*fall,c2=Math.cos(a),s2=Math.sin(a);sx=px+dx*c2-dy*s2;sy=py+dx*s2+dy*c2}
+      else if(fx==='ripple'){const disp=Math.sin(r/Math.max(12,maxR*.22)*TAU)*ampR*fall;sx+=dx/r*disp;sy+=dy/r*disp}
+      else if(fx==='liquid'){const sc=6.5/Math.max(40,maxR);sx+=fbm(sx*sc+id*.17,sy*sc)*ampL*fall;sy+=fbm(sx*sc,sy*sc+id*.13)*ampL*fall}
+      const s=bilerp(buf,P.w,P.h,sx-P.x0,sy-P.y0);rr=s[0];gg=s[1];bb=s[2];ws=1}
+    const a=softA(i,j,w,h),o=(j*w+i)*4;out[o]=rr/ws;out[o+1]=gg/ws;out[o+2]=bb/ws;out[o+3]=a*255}
+  const c=mk(w,h),g=c.getContext('2d'),im=g.createImageData(w,h);im.data.set(out);g.putImageData(im,0,0);return c}
 function regionCanvas(fx,src,px,py,bw,bh,W,H,u,id){
+  if(SOFT_FX[fx])return distortBox(fx,src,px,py,bw,bh,W,H,u,id);
   const w=Math.max(2,Math.round(bw)),h=Math.max(2,Math.round(bh));const c=mk(w,h),g=ctx2d(c);
   const z=fx==='zoom'?S['rg.zoom']:1;const sw=Math.min(W,bw/z),sh=Math.min(H,bh/z);const sx=clamp(px-sw/2,0,W-sw),sy=clamp(py-sh/2,0,H-sh);
   g.drawImage(src,sx,sy,sw,sh,0,0,w,h);
@@ -945,8 +1033,8 @@ const MCTX=mk(2,2).getContext('2d');
 function textPrim(s,x,y,size,o={}){MCTX.font=fontStr(size);const tw=MCTX.measureText(s).width;const ox=o.align==='right'?-tw:o.align==='center'?-tw/2:0;return{k:'text',s,x,y,size,tw,ox,...o}}
 function rotPts(a,cx,cy,ang){if(!ang)return a;const c=Math.cos(ang),s=Math.sin(ang);for(let i=0;i<a.length;i+=2){const x=a[i]-cx,y=a[i+1]-cy;a[i]=cx+x*c-y*s;a[i+1]=cy+x*s+y*c}return a}
 const rectPts=(x,y,w,h)=>[x,y,x+w,y,x+w,y+h,x,y+h];
-function marker(out,shape,x,y,s,rot,c,u){
-  const h=s/2,o={g:'s',c,L:'markers'};const P=(a,ex)=>out.push({k:'path',p:rotPts(a,x,y,rot),...o,...ex});
+function marker(out,shape,x,y,s,rot,c,u,look){
+  const h=s/2,o={g:'s',c,L:'markers',a:look&&look.a,w:look&&look.w,gid:look&&look.gid};const P=(a,ex)=>out.push({k:'path',p:rotPts(a,x,y,rot),...o,...ex});
   switch(shape){
     case'cross':P([x-h,y,x+h,y]);P([x,y-h,x,y+h]);break;
     case'xcross':P([x-h,y-h,x+h,y+h]);P([x-h,y+h,x+h,y-h]);break;
@@ -972,30 +1060,42 @@ function labelText(type,p,salt){
     case'index':return'#'+String(p.id).padStart(4,'0');
     case'lum':return`F ${p.f.toFixed(3)} · L ${p.l.toFixed(3)}`;
   }return''}
-function pickPoints(pts,mode,count,sepU,salt){
-  if(!pts.length||count<=0)return[];const rnd=rngFor(salt),[ax,ay]=aspectUnits();
+function pickPoints(pts,mode,count,sepU,salt,jitter){
+  if(!pts.length||count<=0)return[];const rnd=rngFor(salt),[ax,ay]=aspectUnits();const j=jitter==null?0.25:jitter;
   const arr=pts.map(p=>({p,s:mode==='feature'?p.f:mode==='edge'?p.e:mode==='bright'?p.l:mode==='dark'?1-p.l:0,j:rnd()}));
-  if(mode==='random')arr.sort((a,b)=>a.j-b.j);else arr.sort((a,b)=>(b.s+b.j*.25)-(a.s+a.j*.25));
+  if(mode==='random')arr.sort((a,b)=>a.j-b.j);else arr.sort((a,b)=>(b.s+b.j*j)-(a.s+a.j*j));
   const out=[],s2=sepU*sepU;
   for(const o of arr){if(out.length>=count)break;const x=o.p.x*ax,y=o.p.y*ay;if(out.some(q=>{const dx=q.x*ax-x,dy=q.y*ay-y;return dx*dx+dy*dy<s2}))continue;out.push(o.p)}
   return out}
-function handles(prims,x,y,w,h,hs,c,L){for(const[cx,cy]of[[x,y],[x+w,y],[x,y+h],[x+w,y+h]])prims.push({k:'path',p:rectPts(cx-hs/2,cy-hs/2,hs,hs),close:true,fill:true,c,L,g:'s'})}
+function handles(prims,x,y,w,h,hs,c,L,a,sw,gid){for(const[cx,cy]of[[x,y],[x+w,y],[x,y+h],[x+w,y+h]])prims.push({k:'path',p:rectPts(cx-hs/2,cy-hs/2,hs,hs),close:true,fill:true,c,L,g:'s',a:a??1,w:sw??1,gid})}
+function boxPoints(pts){const sep=S['tb.sep']>0?S['tb.sep']:S['tb.min']*.6;return pickPoints(pts,S['tb.pick'],S['tb.count'],sep,'track',S['tb.rank'])}
+function layerScale(prims,L,opa,wid){for(const p of prims)if(p.L===L){p.a=(p.a??1)*opa;p.w=(p.w??1)*wid}}
 const colKey=v=>v||'#ffffff';
+function shiftPrim(p,dx,dy){if(!dx&&!dy)return;
+  if(p.k==='path'){const a=p.p;for(let i=0;i<a.length;i+=2){a[i]+=dx;a[i+1]+=dy}}
+  else if(p.k==='circ'||p.k==='ell'||p.k==='text'){p.x+=dx;p.y+=dy}
+  else if(p.k==='rrect'){p.x+=dx;p.y+=dy}}
+function applyHand(prims,W,H){if(!Object.keys(NUDGE).length)return;
+  for(const p of prims){const n=p.gid&&NUDGE[p.gid];if(n)shiftPrim(p,n.x*W,n.y*H);
+    if(p.pins&&p.k==='path'&&p.p.length>=4)for(const[gid,end]of p.pins){const q=NUDGE[gid];if(!q)continue;const i=end==='b'?p.p.length-2:0;p.p[i]+=q.x*W;p.p[i+1]+=q.y*H}}}
 
 function buildOverlay(W,H,time,ns){
   const u=Math.min(W,H)/1000,pts=getPoints(),prims=[],imgs=[];let edgeCount=0;
   const add=o=>{prims.push(o);return o};
   const lsz=S['lb.size']*u;
+  const boxSel=(S['tb.on']||(S['ln.on']&&S['ln.source']==='boxes'))?boxPoints(pts):[];
+  const linkPts=S['ln.source']==='boxes'?boxSel:pts;
   // guide grid
   if(S['hud.on']&&S['hud.grid']>0){const step=Math.min(W,H)/S['hud.grid'];
-    for(let x=step;x<W-.5;x+=step)add({k:'path',p:[x,0,x,H],g:'l',a:.16,w:.6,c:S['hud.color'],L:'hud'});
-    for(let y=step;y<H-.5;y+=step)add({k:'path',p:[0,y,W,y],g:'l',a:.16,w:.6,c:S['hud.color'],L:'hud'})}
+    for(let x=step;x<W-.5;x+=step)add({k:'path',p:[x,0,x,H],g:'l',a:.16,w:.6,c:S['hud.color'],L:'hud',gid:'hud:grid'});
+    for(let y=step;y<H-.5;y+=step)add({k:'path',p:[0,y,W,y],g:'l',a:.16,w:.6,c:S['hud.color'],L:'hud',gid:'hud:grid'})}
   // links
-  if(S['ln.on']&&pts.length){const E=getEdges();edgeCount=E.length;const c=colKey(S['ln.color']),a=S['ln.alpha'];const used=new Set();
-    for(const[i,j]of E){add({k:'path',p:[pts[i].x*W,pts[i].y*H,pts[j].x*W,pts[j].y*H],g:'l',a,c,L:'links'});used.add(i);used.add(j)}
-    if(S['ln.nodes']){const ns=S['ln.nodeSize']*u;for(const i of used){const x=pts[i].x*W,y=pts[i].y*H;
-      if(S['ln.nodeShape']==='box')add({k:'path',p:rectPts(x-ns,y-ns,ns*2,ns*2),close:true,g:'s',c,a:Math.min(1,a+.15),L:'links'});
-      else add({k:'circ',x,y,r:ns,g:'s',c,a:Math.min(1,a+.15),L:'links'})}}}
+  if(S['ln.on']&&linkPts.length>1){const E=getEdges(linkPts);edgeCount=E.length;const c=colKey(S['ln.color']),a=S['ln.alpha'],sw=S['ln.width'];const used=new Set();
+    for(const[i,j]of E){const A=linkPts[i],B=linkPts[j],ia=A.id,ib=B.id,lo=ia<ib?ia:ib,hi=ia<ib?ib:ia;
+      add({k:'path',p:[A.x*W,A.y*H,B.x*W,B.y*H],g:'l',a,w:sw,c,L:'links',gid:'ln:'+lo+'-'+hi,pins:[['pt:'+ia,'a'],['pt:'+ib,'b']]});used.add(i);used.add(j)}
+    if(S['ln.nodes']){const ns2=S['ln.nodeSize']*u;for(const i of used){const x=linkPts[i].x*W,y=linkPts[i].y*H,gid='pt:'+linkPts[i].id;
+      if(S['ln.nodeShape']==='box')add({k:'path',p:rectPts(x-ns2,y-ns2,ns2*2,ns2*2),close:true,g:'s',c,a:Math.min(1,a+.15),w:sw,L:'links',gid});
+      else add({k:'circ',x,y,r:ns2,g:'s',c,a:Math.min(1,a+.15),w:sw,L:'links',gid})}}}
   // orbits
   if(S['ob.on']){
     let cx=S['ob.cx']*W,cy=S['ob.cy']*H;const am=S['ob.auto'];
@@ -1016,28 +1116,32 @@ function buildOverlay(W,H,time,ns){
     const nr=S['ob.rays'],rl=S['ob.rayLen']*u,r0=Math.max(gap*nIn*.5,4*u);
     for(let k=0;k<nr;k++){const an=rot+k/nr*TAU+(rnd()-.5)*.35*(TAU/Math.max(1,nr));const len=rl*(.55+rnd()*.45);
       add({k:'path',p:[cx+Math.cos(an)*r0,cy+Math.sin(an)*r0,cx+Math.cos(an)*len,cy+Math.sin(an)*len],g:'l',d:S['ob.dashRays']?true:undefined,a:.7,w:.8,c:oc,L:'orbit'})}
-    add({k:'circ',x:cx,y:cy,r:2.5*u,fill:true,c:om,L:'orbit'})}
+    add({k:'circ',x:cx,y:cy,r:2.5*u,fill:true,c:om,L:'orbit'})
+    layerScale(prims,'orbit',S['ob.opacity'],S['ob.width'])}
   // markers
   if(S['mk.on']){const sz=S['mk.size']*u,sv=S['mk.sizeVar'],by=S['mk.sizeBy'],pr=S['mk.prob'],shp=S['mk.shape'],ra=S['mk.rot'],c=colKey(S['mk.color']);const SH=SHAPES.map(s=>s[0]).filter(s=>s!=='mixed');
     for(const p of pts){if(hash2(p.id,S.seed^0x1234)>=pr)continue;let s=sz;
       if(by==='feature')s*=.15+p.f*1.2;else if(by==='bright')s*=.15+p.l*1.2;else if(by==='dark')s*=.15+(1-p.l)*1.2;else if(by==='edge')s*=.15+p.e*1.2;
       s*=Math.max(.1,1+(hash2(p.id,S.seed^0x777)-.5)*2*sv);
       const sh=shp==='mixed'?SH[Math.floor(hash2(p.id,S.seed^0x999)*SH.length)]:shp;
-      marker(prims,sh,p.x*W,p.y*H,s,ra*hash2(p.id,S.seed^0x4321)*TAU,c,u)}}
+      marker(prims,sh,p.x*W,p.y*H,s,ra*hash2(p.id,S.seed^0x4321)*TAU,c,u,{a:S['mk.opacity'],w:S['mk.width'],gid:'pt:'+p.id})}}
   // tracking boxes
-  if(S['tb.on']&&S['tb.count']>0){const sel=pickPoints(pts,S['tb.pick'],S['tb.count'],S['tb.min']*.6,'track');const c=colKey(S['tb.color']),cen=[];
+  if(S['tb.on']&&boxSel.length){const sel=boxSel,c=colKey(S['tb.color']),ta=S['tb.opacity'],tw=S['tb.width'];
     const mn=S['tb.min'],mx=Math.max(mn,S['tb.max']),ts=lsz*.9;
-    for(const p of sel){const r1=hash2(p.id,S.seed^0x51),r2=hash2(p.id,S.seed^0x52);const s=lerp(mn,mx,r1*r1)*u,asp=(r2-.5)*S['tb.aspect'];
-      const bw=s*(1+asp),bh=s*(1-asp),px=p.x*W,py=p.y*H,x=px-bw/2,y=py-bh/2;
+    for(const p of sel){const r1=hash2(p.id,S.seed^0x51),r2=hash2(p.id,S.seed^0x52);
+      let t;if(S['tb.sizeBy']==='even')t=.5;else if(S['tb.sizeBy']==='feature')t=p.f;else if(S['tb.sizeBy']==='bright')t=p.l;else if(S['tb.sizeBy']==='edge')t=p.e;else t=lerp(.5,r1*r1,S['tb.var']);
+      const s=lerp(mn,mx,clamp(t,0,1))*u,asp=(r2-.5)*S['tb.aspect'];
+      const bw=s*(1+asp),bh=s*(1-asp),px=p.x*W,py=p.y*H,x=px-bw/2,y=py-bh/2,gid='pt:'+p.id;
       let sh=S['tb.shape'];if(sh==='mixed')sh=hash2(p.id,S.seed^0x61)<.5?'box':'circle';
-      if(sh==='circle')add({k:'ell',x:px,y:py,rx:bw/2,ry:bh/2,g:'s',c,L:'tracking'});
-      else if(sh==='rounded')add({k:'rrect',x,y,w:bw,h:bh,r:Math.min(bw,bh)*.28,g:'s',c,L:'tracking'});
-      else add({k:'path',p:rectPts(x,y,bw,bh),close:true,g:'s',c,L:'tracking'});
-      if(S['tb.handles'])handles(prims,x,y,bw,bh,(2.5+S['st.width'])*u,c,'tracking');
-      if(S['tb.cross']){const q=Math.min(bw,bh)*.12;add({k:'path',p:[px-q,py,px+q,py],g:'s',c,L:'tracking'});add({k:'path',p:[px,py-q,px,py+q],g:'s',c,L:'tracking'})}
-      if(S['tb.ltype']!=='none'){let s2=labelText(S['tb.ltype'],p,17);if(S['lb.upper'])s2=s2.toUpperCase();add(textPrim(s2,x+3*u,y+ts+2*u,ts,{c,L:'tracking'}))}
-      cen.push([px,py])}
-    if(S['tb.lines'])for(let i=0;i+1<cen.length;i++)add({k:'path',p:[...cen[i],...cen[i+1]],g:'l',c,a:.8,L:'tracking'})}
+      if(sh==='circle')add({k:'ell',x:px,y:py,rx:bw/2,ry:bh/2,g:'s',c,a:ta,w:tw,L:'tracking',gid});
+      else if(sh==='rounded')add({k:'rrect',x,y,w:bw,h:bh,r:Math.min(bw,bh)*.28,g:'s',c,a:ta,w:tw,L:'tracking',gid});
+      else add({k:'path',p:rectPts(x,y,bw,bh),close:true,g:'s',c,a:ta,w:tw,L:'tracking',gid});
+      if(S['tb.handles'])handles(prims,x,y,bw,bh,(2.5+S['st.width'])*u,c,'tracking',ta,tw,gid);
+      if(S['tb.cross']){const q=Math.min(bw,bh)*.12;add({k:'path',p:[px-q,py,px+q,py],g:'s',c,a:ta,w:tw,L:'tracking',gid});add({k:'path',p:[px,py-q,px,py+q],g:'s',c,a:ta,w:tw,L:'tracking',gid})}
+      if(S['tb.ltype']!=='none'){let s2=labelText(S['tb.ltype'],p,17);if(S['lb.upper'])s2=s2.toUpperCase();add(textPrim(s2,x+3*u,y+ts+2*u,ts,{c,a:ta,L:'tracking',gid}))}}
+    if(S['tb.lines']&&sel.length>1){const edges=connectPoints(sel,S['tb.link'],S['tb.linkDist'],S['tb.linkK'],3,'feature');
+      for(const[i,j]of edges){const ia=sel[i].id,ib=sel[j].id,lo=ia<ib?ia:ib,hi=ia<ib?ib:ia;
+        add({k:'path',p:[sel[i].x*W,sel[i].y*H,sel[j].x*W,sel[j].y*H],g:'l',c,a:ta,w:tw,L:'tracking',gid:'tbk:'+lo+'-'+hi,pins:[['pt:'+ia,'a'],['pt:'+ib,'b']]})}}}
   // lens / filter boxes
   if(S['rg.on']&&S['rg.count']>0&&pts.length){
     const[clean,ck]=adjustStage(W,H,ns);const sel=pickPoints(pts,S['rg.pick'],S['rg.count'],S['rg.min']*.8,'region');
@@ -1050,36 +1154,38 @@ function buildOverlay(W,H,time,ns){
       if(manual){bw=clamp(manual.w*W,8,W*1.5);bh=clamp(manual.h*H,8,H*1.5);cx=manual.x*W+bw/2;cy=manual.y*H+bh/2}
       const px=manual?cx:px0,py=manual?cy:py0;
       const fx=S['rg.effect']==='mixed'?fxl[Math.floor(hash2(p.id,S.seed^0x94)*fxl.length)]:S['rg.effect'];
-      const key=[ns,W,H,ck,fx,px|0,py|0,bw|0,bh|0,S['rg.zoom'],S['rg.cell'],S['rg.gradA'],S['rg.gradB'],S.seed].join('|');
+      const key=[ns,W,H,ck,fx,px|0,py|0,bw|0,bh|0,S['rg.zoom'],S['rg.cell'],S['rg.angle'],S['rg.gradA'],S['rg.gradB'],S.seed].join('|');
       let cv2=RGCACHE.get(key);if(!cv2){cv2=regionCanvas(fx,clean,px,py,bw,bh,W,H,u,p.id);RGCACHE.set(key,cv2)}
       const x=cx-bw/2,y=cy-bh/2;const im={x,y,w:bw,h:bh,cv:cv2,boxi:bi};if(manual)im.lock=1;imgs.push(im);
       const put=o=>{if(manual)o.lock=1;add(o)};
-      if(S['rg.border']||manual)put({k:'path',p:rectPts(x,y,bw,bh),close:true,g:'s',c:'p',L:'regions'});
-      if(S['rg.handles']){const n0=prims.length;handles(prims,x,y,bw,bh,(3+S['st.width'])*u,'p','regions');if(manual)for(let k=n0;k<prims.length;k++)prims[k].lock=1}
+      const rc=S['rg.color']||'p',ra=S['rg.opacity'],rw=S['rg.width'];im.a=ra;
+      if((S['rg.border']&&!SOFT_FX[fx])||manual)put({k:'path',p:rectPts(x,y,bw,bh),close:true,g:'s',c:rc,a:ra,w:rw,L:'regions'});
+      if(S['rg.handles']&&!SOFT_FX[fx]){const n0=prims.length;handles(prims,x,y,bw,bh,(3+S['st.width'])*u,rc,'regions',ra,rw);if(manual)for(let k=n0;k<prims.length;k++)prims[k].lock=1}
       if(!manual){const dx=px0-cx,dy=py0-cy;if(Math.abs(dx)>bw/2||Math.abs(dy)>bh/2){const t=Math.min(bw/2/Math.max(1e-6,Math.abs(dx)),bh/2/Math.max(1e-6,Math.abs(dy)));
-        add({k:'path',p:[cx+dx*t,cy+dy*t,px0,py0],g:'l',c:'p',a:.9,L:'regions'});add({k:'circ',x:px0,y:py0,r:2.6*u,c:'p',L:'regions'})}}
+        add({k:'path',p:[cx+dx*t,cy+dy*t,px0,py0],g:'l',c:rc,a:ra*.9,w:rw,L:'regions'});add({k:'circ',x:px0,y:py0,r:2.6*u,c:rc,a:ra,L:'regions'})}}
       if(S['rg.label']){let s2=FX_LABEL[fx]+(fx==='zoom'?S['rg.zoom'].toFixed(1):'');if(S['lb.upper'])s2=s2.toUpperCase();const ts=lsz*.9;
-        const below=y+bh+ts*1.5<H;put(textPrim(s2,x,below?y+bh+ts*1.3:y-ts*.5,ts,{c:'p',L:'regions'}))}})}
+        const below=y+bh+ts*1.5<H;put(textPrim(s2,x,below?y+bh+ts*1.3:y-ts*.5,ts,{c:rc,a:ra,L:'regions'}))}})}
   // labels
   if(S['lb.on']){const off=S['lb.offset']*u,pr=S['lb.prob'],c=colKey(S['lb.color']);
     for(const p of pts){if(hash2(p.id,S.seed^0xabc)>=pr)continue;let s=labelText(S['lb.type'],p,1);if(S['lb.upper'])s=s.toUpperCase();
-      add(textPrim(s,p.x*W+off,p.y*H-off,lsz,{c,box:S['lb.box'],form:S['lb.form'],L:'labels'}))}}
+      add(textPrim(s,p.x*W+off,p.y*H-off,lsz,{c,a:S['lb.opacity'],box:S['lb.box'],form:S['lb.form'],L:'labels',gid:'pt:'+p.id}))}}
   // HUD
   if(S['hud.on']){const m=S['hud.margin']*u,c=S['hud.color'],hs=lsz*.85;
-    if(S['hud.frame']){if(S['hud.shape']==='circle')add({k:'ell',x:W/2,y:H/2,rx:Math.max(1,W/2-m),ry:Math.max(1,H/2-m),g:'s',c,L:'hud'});
-      else add({k:'path',p:rectPts(m,m,W-2*m,H-2*m),close:true,g:'s',c,L:'hud'});const n=S['hud.shape']==='circle'?0:S['hud.ticks'];
+    if(S['hud.frame']){if(S['hud.shape']==='circle')add({k:'ell',x:W/2,y:H/2,rx:Math.max(1,W/2-m),ry:Math.max(1,H/2-m),g:'s',c,L:'hud',gid:'hud:frame'});
+      else add({k:'path',p:rectPts(m,m,W-2*m,H-2*m),close:true,g:'s',c,L:'hud',gid:'hud:frame'});const n=S['hud.shape']==='circle'?0:S['hud.ticks'];
       if(n>0)for(let i=0;i<=n;i++){const big=i%5===0,len=(big?12:6)*u,x=m+(W-2*m)*i/n,y=m+(H-2*m)*i/n;
-        add({k:'path',p:[x,m,x,m+len],g:'s',c,w:.8,L:'hud'});add({k:'path',p:[x,H-m,x,H-m-len],g:'s',c,w:.8,L:'hud'});
-        add({k:'path',p:[m,y,m+len,y],g:'s',c,w:.8,L:'hud'});add({k:'path',p:[W-m,y,W-m-len,y],g:'s',c,w:.8,L:'hud'});
-        if(big&&i>0&&i<n){add(textPrim(String(Math.round(i/n*IMG.w)),x+2*u,m+len+hs,hs*.85,{c,a:.8,L:'hud'}))}}}
+        add({k:'path',p:[x,m,x,m+len],g:'s',c,w:.8,L:'hud',gid:'hud:frame'});add({k:'path',p:[x,H-m,x,H-m-len],g:'s',c,w:.8,L:'hud',gid:'hud:frame'});
+        add({k:'path',p:[m,y,m+len,y],g:'s',c,w:.8,L:'hud',gid:'hud:frame'});add({k:'path',p:[W-m,y,W-m-len,y],g:'s',c,w:.8,L:'hud',gid:'hud:frame'});
+        if(big&&i>0&&i<n){add(textPrim(String(Math.round(i/n*IMG.w)),x+2*u,m+len+hs,hs*.85,{c,a:.8,L:'hud',gid:'hud:frame'}))}}}
     if(S['hud.text']){const tm=m+(S['hud.frame']?8*u:0)+hs;
       const lines=[`SRC ${IMG.w}×${IMG.h}`,`SEED ${S.seed}`,`PTS ${pts.length} · EDG ${edgeCount}`,`DETECT ${S['det.source'].toUpperCase()} / ${S['det.mode'].toUpperCase()}`];
-      lines.forEach((s,i)=>add(textPrim(s,tm-hs+2*u,tm+i*hs*1.35,hs,{c,L:'hud'})));
+      lines.forEach((s,i)=>add(textPrim(s,tm-hs+2*u,tm+i*hs*1.35,hs,{c,L:'hud',gid:'hud:text'})));
       const br=[(IMG.name||'untitled').slice(0,32),`T ${animT.toFixed(2)} · ${S['st.blend']==='source-over'?'NORMAL':S['st.blend'].toUpperCase()}`];
-      br.forEach((s,i)=>add(textPrim(s,W-tm+hs-2*u,H-tm+hs-(br.length-1-i)*hs*1.35,hs,{c,align:'right',L:'hud'})))}
+      br.forEach((s,i)=>add(textPrim(s,W-tm+hs-2*u,H-tm+hs-(br.length-1-i)*hs*1.35,hs,{c,align:'right',L:'hud',gid:'hud:text'})))}
     if(S['hud.cross']){const cx=W/2,cy=H/2,a=24*u,b=6*u;
-      for(const[x1,y1,x2,y2]of[[cx-a,cy,cx-b,cy],[cx+b,cy,cx+a,cy],[cx,cy-a,cx,cy-b],[cx,cy+b,cx,cy+a]])add({k:'path',p:[x1,y1,x2,y2],g:'s',c:S['hud.mark'],L:'hud'});
-      add({k:'circ',x:cx,y:cy,r:1.6*u,fill:true,c:S['hud.mark'],L:'hud'})}}
+      for(const[x1,y1,x2,y2]of[[cx-a,cy,cx-b,cy],[cx+b,cy,cx+a,cy],[cx,cy-a,cx,cy-b],[cx,cy+b,cx,cy+a]])add({k:'path',p:[x1,y1,x2,y2],g:'s',c:S['hud.mark'],L:'hud',gid:'hud:cross'});
+      add({k:'circ',x:cx,y:cy,r:1.6*u,fill:true,c:S['hud.mark'],L:'hud',gid:'hud:cross'})}
+    layerScale(prims,'hud',S['hud.opacity'],S['hud.width'])}
   // displacement of vectors
   if(S['wp.on']&&S['wp.target']!=='image'&&S['wp.amp']>0){const f=makeWarp(W,H,time),seg=10*u;
     for(const p of prims){if(p.lock)continue;
@@ -1090,6 +1196,8 @@ function buildOverlay(W,H,time,ns){
       else if(p.k==='circ'||p.k==='text'||p.k==='ell'){const q=f(p.x,p.y);p.x=q[0];p.y=q[1]}
       else if(p.k==='rrect'){const q=f(p.x+p.w/2,p.y+p.h/2);p.x=q[0]-p.w/2;p.y=q[1]-p.h/2}}
     for(const im of imgs){if(im.lock)continue;const q=f(im.x+im.w/2,im.y+im.h/2);im.x=q[0]-im.w/2;im.y=q[1]-im.h/2}}
+  for(const p of prims) if(p.L==='orbit') p.gid='orbit';
+  applyHand(prims,W,H);
   if(ns==='P')RGLAY=imgs.filter(im=>im.boxi!=null).map(im=>({i:im.boxi,x:im.x/W,y:im.y/H,w:im.w/W,h:im.h/H}));
   return{prims,imgs,u,edges:edgeCount}}
 
@@ -1128,7 +1236,7 @@ function renderComposite(out,W,H,o){
     if(!alpha&&scan&&!S['px.scanTop'])scanlines(g,W,H,u);
     if(!alpha&&S['bs.vignette']>0){const gr=g.createRadialGradient(W/2,H/2,Math.min(W,H)*.3,W/2,H/2,Math.hypot(W,H)/2);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,`rgba(0,0,0,${S['bs.vignette']})`);g.fillStyle=gr;g.fillRect(0,0,W,H)}}
   const ov=buildOverlay(W,H,o.time,o.ns);
-  for(const im of ov.imgs)g.drawImage(im.cv,im.x,im.y,im.w,im.h);
+  for(const im of ov.imgs){g.globalAlpha=im.a??1;g.drawImage(im.cv,im.x,im.y,im.w,im.h)}g.globalAlpha=1;
   const oc=tmpCanvas(o.ns,W,H),og=oc.getContext('2d');og.setTransform(1,0,0,1,0,0);og.clearRect(0,0,W,H);renderPrims(og,ov.prims,u);
   g.globalCompositeOperation=(o.overlayOnly||alpha)?'source-over':S['st.blend'];g.globalAlpha=S['st.opacity'];g.drawImage(oc,0,0);
   g.globalCompositeOperation='source-over';g.globalAlpha=1;
@@ -1156,7 +1264,9 @@ function doRender(now){
     else{ov=renderComposite(cv,W,H,{ns:'P',time:animT,alpha:TL.alpha});
       if(SHOWMAP){g.save();g.globalAlpha=.88;g.imageSmoothingEnabled=true;g.fillStyle='rgba(0,0,0,.55)';g.fillRect(0,0,W,H);g.drawImage(getHeat(),0,0,W,H);g.restore()}
       if(SHOWPTS||SHOWMAP){g.fillStyle=SHOWMAP?'#38f0ff':'#ff2d6f';const pts=getPoints(),s=Math.max(2,Math.min(W,H)/400);for(const p of pts)g.fillRect(p.x*W-s/2,p.y*H-s/2,s,s)}
-      if(rgEditOn())drawRgHandles(g)}
+      if(rgEditOn())drawRgHandles(g);
+      if(HAND)drawHandMark(g,ov.prims,HAND.gid);PREVIEW=ov}
+    if(COMPARE)PREVIEW=null
   }catch(e){console.error(e);setState('error','busy')}
   const ms=performance.now()-t0;
   $('#stPrev').textContent=`${W}×${H}`;$('#stPts').textContent=getPoints().length;$('#stEdges').textContent=ov.edges||0;$('#stPrims').textContent=ov.prims.length;$('#stMs').textContent=ms.toFixed(1);$('#stFrame').textContent=TL.frame;
@@ -1190,6 +1300,37 @@ function drawRgHandles(g){const hs=Math.max(4,8/VIEW.z);g.save();g.lineWidth=Mat
     for(const[cx,cy]of[[x,y],[x+w,y],[x,y+h],[x+w,y+h],[x+w/2,y],[x+w/2,y+h],[x,y+h/2],[x+w,y+h/2]]){g.fillRect(cx-hs/2,cy-hs/2,hs,hs);g.strokeRect(cx-hs/2,cy-hs/2,hs,hs)}}
   g.restore()}
 
+/* ============================== hand placement ============================== */
+let NUDGE={},HAND=null,PREVIEW=null,LAYOUT=null;
+function clearHand(){NUDGE={};HAND=null}
+function layoutKey(){const skip={'mk.color':1,'mk.opacity':1,'mk.width':1,'ln.color':1,'ln.alpha':1,'ln.width':1,'lb.color':1,'lb.opacity':1,'lb.words':1,'lb.upper':1,'tb.color':1,'tb.opacity':1,'tb.width':1,'ob.color':1,'ob.mark':1,'ob.opacity':1,'ob.width':1,'hud.color':1,'hud.mark':1,'hud.opacity':1,'hud.width':1};
+  const keys=[];for(const k in S)if(!skip[k]&&/^(det|mk|ln|lb|tb|ob|hud|wp)\./.test(k))keys.push(k);keys.sort();
+  let s=(IMG?IMG.id:0)+'|'+S.seed;for(const k of keys)s+='|'+k+'='+S[k];return s}
+function touchLayout(){const n=layoutKey();if(LAYOUT!==null&&n!==LAYOUT)clearHand();LAYOUT=n}
+function textBox(p){const pad=p.size*.28,x=p.x+(p.ox||0)-pad,y=p.y-p.size*.86;return{x,y,w:p.tw+pad*2,h:p.size*1.12}}
+function pointInPoly(a,x,y){let ins=false;for(let i=0,j=a.length-2;i<a.length;i+=2){const xi=a[i],yi=a[i+1],xj=a[j],yj=a[j+1];if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/((yj-yi)||1e-9)+xi)ins=!ins;j=i}return ins}
+function distToPath(a,x,y,closed){let best=1e9;const n=a.length;for(let i=0;i<n-(closed?0:2);i+=2){const j=i+2<n?i+2:0;const x0=a[i],y0=a[i+1],x1=a[j],y1=a[j+1],dx=x1-x0,dy=y1-y0,l2=dx*dx+dy*dy||1;let t=((x-x0)*dx+(y-y0)*dy)/l2;if(t<0)t=0;else if(t>1)t=1;const d=Math.hypot(x-(x0+dx*t),y-(y0+dy*t));if(d<best)best=d}return best}
+function nearPrim(p,x,y,pad){const stroke=p.gid==='orbit'||p.gid==='hud:frame'||p.gid==='hud:cross';
+  if(p.k==='circ')return Math.hypot(x-p.x,y-p.y)<=p.r+pad;
+  if(p.k==='ell'){if(stroke){const d=Math.hypot((x-p.x)/(p.rx||1),(y-p.y)/(p.ry||1));return Math.abs(d-1)<=pad/Math.max(1,Math.min(p.rx||1,p.ry||1))}const dx=(x-p.x)/((p.rx||1)+pad),dy=(y-p.y)/((p.ry||1)+pad);return dx*dx+dy*dy<=1}
+  if(p.k==='text'){const b=textBox(p);return x>=b.x-pad&&y>=b.y-pad&&x<=b.x+b.w+pad&&y<=b.y+b.h+pad}
+  if(p.k==='rrect')return x>=p.x-pad&&y>=p.y-pad&&x<=p.x+p.w+pad&&y<=p.y+p.h+pad;
+  if(p.k==='path'){if(!stroke&&p.close&&p.p.length>=6&&pointInPoly(p.p,x,y))return true;return distToPath(p.p,x,y,!!p.close)<=pad}
+  return false}
+function isBody(p){if(p.gid==='orbit'||p.gid==='hud:frame'||p.gid==='hud:cross'||p.gid==='hud:grid')return false;if(p.gid.startsWith('ln:')||p.gid.startsWith('tbk:'))return false;return p.k==='text'||p.k==='ell'||p.k==='rrect'||p.k==='circ'||(p.k==='path'&&p.close)}
+function handHit(nx,ny){if(!PREVIEW)return null;const x=nx*cv.width,y=ny*cv.height,pad=8/Math.max(.05,VIEW.z),prims=PREVIEW.prims;let stroke=null;
+  for(let i=prims.length-1;i>=0;i--){const p=prims[i];if(!p.gid||p.gid==='hud:grid'||!nearPrim(p,x,y,pad))continue;if(isBody(p))return p.gid;if(!stroke)stroke=p.gid}return stroke}
+function rgMoveHit(nx,ny){if(!S['rg.on'])return null;const px=nx*cv.width,py=ny*cv.height;
+  for(let n=RGLAY.length-1;n>=0;n--){const b=RGLAY[n],x=b.x*cv.width,y=b.y*cv.height,w=b.w*cv.width,h=b.h*cv.height;if(px>=x&&px<=x+w&&py>=y&&py<=y+h)return b}return null}
+function drawHandMark(g,prims,gid){if(!gid)return;g.save();g.globalCompositeOperation='source-over';g.globalAlpha=1;g.strokeStyle='#7dfff1';g.lineWidth=Math.max(1,1.5/VIEW.z);g.setLineDash([5/VIEW.z,4/VIEW.z]);
+  for(const p of prims){if(p.gid!==gid)continue;g.beginPath();
+    if(p.k==='path'){const a=p.p;g.moveTo(a[0],a[1]);for(let i=2;i<a.length;i+=2)g.lineTo(a[i],a[i+1]);if(p.close)g.closePath();g.stroke()}
+    else if(p.k==='circ'){g.arc(p.x,p.y,Math.max(.1,p.r),0,TAU);g.stroke()}
+    else if(p.k==='ell'){g.ellipse(p.x,p.y,Math.max(.1,p.rx),Math.max(.1,p.ry),0,0,TAU);g.stroke()}
+    else if(p.k==='rrect'){g.roundRect(p.x,p.y,p.w,p.h,p.r||0);g.stroke()}
+    else if(p.k==='text'){const b=textBox(p);g.strokeRect(b.x,b.y,b.w,b.h)}}
+  g.restore()}
+
 /* ============================== viewport ============================== */
 const VIEW={z:1,x:0,y:0,fit:true};
 function fitView(){const r=view.getBoundingClientRect();const W=cv.width,H=cv.height;const z=Math.min((r.width-48)/W,(r.height-48)/H);VIEW.z=Math.max(.02,z);VIEW.x=(r.width-W*VIEW.z)/2;VIEW.y=(r.height-H*VIEW.z)/2;VIEW.fit=true;applyView()}
@@ -1207,15 +1348,26 @@ view.addEventListener('pointerdown',e=>{if(e.button===0&&e.altKey&&IMG){const[nx
     setParam('det.color',hex);if(S['det.source']!=='color'&&S['det.source']!=='hue')setParam('det.source','color');toast('Detect color → '+hex);return}
   if(e.button===0&&e.shiftKey&&IMG){const[nx,ny]=toImg(e);if(nx>=0&&nx<=1&&ny>=0&&ny<=1){
     setParam('ob.auto','manual');setParam('ob.cx',+nx.toFixed(3));setParam('ob.cy',+ny.toFixed(3));if(!S['ob.on'])setParam('ob.on',true);toast('Orbit center → '+nx.toFixed(2)+', '+ny.toFixed(2))}return}
-  if(e.button===0&&!e.altKey&&!e.shiftKey&&rgEditOn()){const[nx,ny]=toImg(e);const hit=rgHit(nx,ny);if(hit){const b=RGLAY.find(q=>q.i===hit.i);RGDRAG={i:hit.i,mode:hit.mode,px:nx,py:ny,ox:b.x,oy:b.y,ow:b.w,oh:b.h,x:b.x,y:b.y,w:b.w,h:b.h};view.setPointerCapture(e.pointerId);view.style.cursor=rgCursor(hit.mode);return}}
+  if(e.button===0&&!e.altKey&&!e.shiftKey&&IMG&&!COMPARE){const[nx,ny]=toImg(e);
+    if(rgEditOn()){const hit=rgHit(nx,ny);if(hit){const b=RGLAY.find(q=>q.i===hit.i);RGDRAG={i:hit.i,mode:hit.mode,px:nx,py:ny,ox:b.x,oy:b.y,ow:b.w,oh:b.h,x:b.x,y:b.y,w:b.w,h:b.h};view.setPointerCapture(e.pointerId);view.style.cursor=rgCursor(hit.mode);return}}
+    const gid=handHit(nx,ny);if(gid){const n=NUDGE[gid]||{x:0,y:0};HAND={gid,px:nx,py:ny,ox:n.x,oy:n.y};view.setPointerCapture(e.pointerId);view.style.cursor='move';return}
+    if(!rgEditOn()){const b=rgMoveHit(nx,ny);if(b){RGDRAG={i:b.i,mode:'move',px:nx,py:ny,ox:b.x,oy:b.y,ow:b.w,oh:b.h,x:b.x,y:b.y,w:b.w,h:b.h};view.setPointerCapture(e.pointerId);view.style.cursor='move';return}}}
   if(e.button===0||e.button===1){pan={x:e.clientX,y:e.clientY,vx:VIEW.x,vy:VIEW.y};view.setPointerCapture(e.pointerId);view.classList.add('panning')}});
 view.addEventListener('pointermove',e=>{
+  if(HAND){const[nx,ny]=toImg(e);NUDGE[HAND.gid]={x:HAND.ox+nx-HAND.px,y:HAND.oy+ny-HAND.py};view.style.cursor='move';requestRender();return}
   if(RGDRAG){rgApplyDrag(...toImg(e));view.style.cursor=rgCursor(RGDRAG.mode);requestRender();return}
   if(pan){VIEW.x=pan.vx+e.clientX-pan.x;VIEW.y=pan.vy+e.clientY-pan.y;VIEW.fit=false;applyView()}
   if(IMG){const[nx,ny]=toImg(e);$('#stXY').textContent=(nx>=0&&nx<=1&&ny>=0&&ny<=1)?`x ${Math.round(nx*IMG.w)}  y ${Math.round(ny*IMG.h)}`:'x — y —';
-    if(!pan&&rgEditOn()){const hit=rgHit(nx,ny);view.style.cursor=hit?rgCursor(hit.mode):''}}});
-view.addEventListener('pointerup',()=>{if(RGDRAG){const m={...rgStored()};m[RGDRAG.i]={x:+RGDRAG.x.toFixed(4),y:+RGDRAG.y.toFixed(4),w:+RGDRAG.w.toFixed(4),h:+RGDRAG.h.toFixed(4)};RGDRAG=null;rgSaveMap(m)}pan=null;view.classList.remove('panning')});
-view.addEventListener('dblclick',e=>{if(rgEditOn()){const hit=rgHit(...toImg(e));if(hit){const m={...rgStored()};delete m[hit.i];rgSaveMap(m);toast('Box reset');return}}fitView()});
+    if(!pan){if(rgEditOn()){const hit=rgHit(nx,ny);if(hit){view.style.cursor=rgCursor(hit.mode);return}}
+      const gid=handHit(nx,ny);view.style.cursor=gid?'move':''}}});
+view.addEventListener('pointerup',()=>{
+  if(HAND){const n=NUDGE[HAND.gid];if(n&&Math.abs(n.x)<1e-4&&Math.abs(n.y)<1e-4)delete NUDGE[HAND.gid];else if(n){n.x=+n.x.toFixed(4);n.y=+n.y.toFixed(4)}HAND=null;requestRender()}
+  if(RGDRAG){const m={...rgStored()};m[RGDRAG.i]={x:+RGDRAG.x.toFixed(4),y:+RGDRAG.y.toFixed(4),w:+RGDRAG.w.toFixed(4),h:+RGDRAG.h.toFixed(4)};RGDRAG=null;rgSaveMap(m)}pan=null;view.classList.remove('panning')});
+view.addEventListener('dblclick',e=>{const[nx,ny]=toImg(e);
+  if(rgEditOn()){const hit=rgHit(nx,ny);if(hit){const m={...rgStored()};delete m[hit.i];rgSaveMap(m);toast('Box reset');return}}
+  const gid=handHit(nx,ny);if(gid){if(NUDGE[gid]){delete NUDGE[gid];requestRender();toast('Позиция сброшена')}return}
+  const b=rgMoveHit(nx,ny);if(b){const m={...rgStored()};delete m[b.i];rgSaveMap(m);toast('Box reset');return}
+  fitView()});
 window.addEventListener('resize',()=>{if(VIEW.fit)fitView()});
 
 /* ============================== UI builder ============================== */
@@ -1288,10 +1440,10 @@ function mutate(){
 
 /* ============================== state changes / history ============================== */
 let histTimer=0,saveTimer=0;const HIST={stack:[],i:-1};
-function setParam(k,v){if(S[k]===v)return;S[k]=v;if(CTRL[k])CTRL[k].set(v);changed()}
+function setParam(k,v){if(S[k]===v)return;S[k]=v;if(CTRL[k])CTRL[k].set(v);touchLayout();changed()}
 function changed(){updateVis();requestRender();clearTimeout(histTimer);histTimer=setTimeout(pushHistory,350);clearTimeout(saveTimer);saveTimer=setTimeout(saveState,500);markPresetDirty();updateExpInfo()}
 function pushHistory(){const s=JSON.stringify(S);if(HIST.stack[HIST.i]===s)return;HIST.stack=HIST.stack.slice(0,HIST.i+1);HIST.stack.push(s);if(HIST.stack.length>150)HIST.stack.shift();HIST.i=HIST.stack.length-1}
-function applyState(obj,push=true){obj=migrate(obj);S={...DEF};for(const k in obj)if(k in DEF&&typeof obj[k]===typeof DEF[k])S[k]=obj[k];syncAll();requestRender();saveState();if(push){clearTimeout(histTimer);pushHistory()}}
+function applyState(obj,push=true){obj=migrate(obj);S={...DEF};for(const k in obj)if(k in DEF&&typeof obj[k]===typeof DEF[k])S[k]=obj[k];touchLayout();syncAll();requestRender();saveState();if(push){clearTimeout(histTimer);pushHistory()}}
 function undo(){clearTimeout(histTimer);pushHistory();if(HIST.i>0){HIST.i--;applyState(JSON.parse(HIST.stack[HIST.i]),false);toast('Undo')}}
 function redo(){if(HIST.i<HIST.stack.length-1){HIST.i++;applyState(JSON.parse(HIST.stack[HIST.i]),false);toast('Redo')}}
 const LS_P='glitchlab.presets.v1',LS_S='glitchlab.state.v1',LS_UI='glitchlab.ui.v1';
@@ -1331,7 +1483,7 @@ function importPresets(file){const fr=new FileReader();fr.onload=()=>{try{const 
     if(storeUser(a)){renderPresets();toast(`Imported ${list.length} preset(s)`,'ok')}}catch(e){toast('Ошибка импорта JSON: '+e.message,'err')}};fr.readAsText(file)}
 
 /* ============================== image loading ============================== */
-function setImage(el,name){IMG={el,w:el.naturalWidth||el.width,h:el.naturalHeight||el.height,id:++imgCounter,name};RGCACHE.clear();
+function setImage(el,name){IMG={el,w:el.naturalWidth||el.width,h:el.naturalHeight||el.height,id:++imgCounter,name};RGCACHE.clear();touchLayout();
   const t=$('#thumb'),g=t.getContext('2d'),s=Math.max(t.width/IMG.w,t.height/IMG.h);g.fillStyle='#000';g.fillRect(0,0,t.width,t.height);g.drawImage(el,(t.width-IMG.w*s)/2,(t.height-IMG.h*s)/2,IMG.w*s,IMG.h*s);
   $('#srcName').textContent=name;$('#srcDim').textContent=`${IMG.w} × ${IMG.h}px`;updateExpInfo();cv.width=1;requestRender()}
 function loadFile(f){if(!f)return;if(!/^image\//.test(f.type)){toast('Это не изображение','err');return}const url=URL.createObjectURL(f);const im=new Image();
@@ -1521,7 +1673,8 @@ function init(){
     if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();tlStep((e.key==='ArrowRight'?1:-1)*(e.shiftKey?10:1));return}
     if(k==='r')randomizeSeed();else if(k==='m')mutate();else if(k==='o')$('#fileImg').click();
     else if(k==='p')$('#bPts').click();else if(k==='g')$('#bMap').click();else if(k==='f')fitView();else if(k==='h')panels();
-    else if(e.key==='\\')cmp(true);else if(e.key==='?')modal.classList.toggle('hidden');else if(e.key==='Escape')modal.classList.add('hidden');
+    else if(e.key==='\\')cmp(true);else if(e.key==='?')modal.classList.toggle('hidden');
+    else if(e.key==='Escape'){if(!modal.classList.contains('hidden'))modal.classList.add('hidden');else if(Object.keys(NUDGE).length){clearHand();requestRender();toast('Сдвиги сброшены')}}
     else if(e.key==='[')cyclePreset(-1);else if(e.key===']')cyclePreset(1);
     else if(/^[1-9]$/.test(e.key)){const all=allPresets(),p=all[+e.key-1];if(p)loadPreset(p)}});
   window.addEventListener('keyup',e=>{if(e.key==='\\')cmp(false)});
