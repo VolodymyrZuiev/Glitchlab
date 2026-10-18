@@ -131,6 +131,14 @@ textarea:focus{border-color:var(--acc)}
 #drop{position:absolute;inset:14px;border:2px dashed var(--acc);border-radius:10px;display:none;align-items:center;justify-content:center;font:600 16px var(--mono);letter-spacing:.2em;color:var(--acc);background:rgba(8,20,24,.75);pointer-events:none;z-index:5}
 #drop.on{display:flex}
 #hint{position:absolute;left:10px;bottom:8px;font:10px var(--mono);color:#59616a;pointer-events:none;background:rgba(0,0,0,.35);padding:3px 6px;border-radius:3px}
+.tl{display:flex;flex-direction:column;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
+.tlbar{display:flex;gap:5px;align-items:center}
+.tlbar input[type=range]{flex:1;min-width:0;accent-color:var(--acc)}
+.tln{width:64px!important;height:22px!important}
+.tlgrid{display:grid;grid-template-columns:1fr 1fr;gap:4px 8px}
+.tlgrid label,.tlcheck{display:flex;align-items:center;justify-content:space-between;gap:6px;color:var(--dim);font-size:11px}
+.tlchecks{display:flex;gap:12px}
+.tlmeta{font:10px var(--mono);color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #cmpTag{position:absolute;top:10px;left:50%;transform:translateX(-50%);font:600 10px var(--mono);letter-spacing:.2em;padding:4px 8px;background:var(--acc2);color:#fff;border-radius:3px;display:none}
 #cmpTag.on{display:block}
 /* status */
@@ -211,7 +219,30 @@ kbd{background:#24282e;border:1px solid #3a4047;border-bottom-width:2px;border-r
       <div id="renderSec"></div>
       <div id="expInfo" class="dim mono" style="margin:6px 0"></div>
       <div class="prow"><button id="bPng2" class="btn pri">PNG</button><button id="bSvg2" class="btn pri">SVG</button></div>
-      <div class="prow"><button id="bPngOv2" class="btn">Overlay PNG</button><button id="bRec" class="btn" title="Запись превью в видео (для анимации warp / slices)">● Rec</button></div>
+      <div class="prow"><button id="bPngOv2" class="btn">Overlay PNG</button><button id="bRec" class="btn" title="Видео превью по диапазону таймлайна, без альфы">● Rec</button></div>
+      <div class="tl" id="tlBox">
+        <div class="lh">Timeline<span class="grow"></span><span id="tlInfo" class="tlmeta"></span></div>
+        <div class="tlbar">
+          <button class="btn ic" id="tlPlay" title="Пробел — play / stop">▶</button>
+          <input id="tlScrub" type="range" min="0" max="71" value="0" title="Текущий кадр">
+          <input id="tlFrame" class="num tln" title="Текущий кадр">
+        </div>
+        <div class="tlgrid">
+          <label>FPS <input id="tlFps" class="num tln" title="Кадров в секунду"></label>
+          <label>In <input id="tlStart" class="num tln" title="Первый кадр"></label>
+          <label>Out <input id="tlEnd" class="num tln" title="Последний кадр, включительно"></label>
+          <label>Frames <input id="tlCount" class="num tln" title="Сколько кадров записать"></label>
+        </div>
+        <div class="tlchecks">
+          <label class="tlcheck"><span>Loop</span><input id="tlLoop" type="checkbox" checked></label>
+          <label class="tlcheck" title="Прозрачный фон. Символы и векторы остаются, заливка кадра нет. Фото под текстом — только если Image under text больше нуля."><span>Alpha</span><input id="tlAlpha" type="checkbox" checked></label>
+        </div>
+        <div class="prow" style="margin:0">
+          <button id="tlDir" class="btn" title="Папка для PNG">Папка…</button>
+          <button id="bSeq" class="btn pri" title="PNG-секвенция по диапазону. С альфой, если Alpha включена.">Sequence</button>
+        </div>
+        <div id="tlDirName" class="tlmeta">папка не выбрана — скачается zip</div>
+      </div>
     </div>
   </aside>
 
@@ -233,6 +264,7 @@ kbd{background:#24282e;border:1px solid #3a4047;border-bottom-width:2px;border-r
     <span>pts <b id="stPts">0</b></span>
     <span>edges <b id="stEdges">0</b></span>
     <span>vectors <b id="stPrims">0</b></span>
+    <span>frame <b id="stFrame">0</b></span>
     <span>render <b id="stMs">0</b> ms</span>
     <span>zoom <b id="stZoom">100%</b></span>
     <span class="grow"></span>
@@ -257,6 +289,8 @@ kbd{background:#24282e;border:1px solid #3a4047;border-bottom-width:2px;border-r
     <tr><td>Alt + клик по холсту</td><td>Пипетка: детектить этот цвет</td></tr>
     <tr><td><kbd>\</kbd> (удерживать)</td><td>Сравнить с оригиналом</td></tr>
     <tr><td><kbd>F</kbd> / <kbd>H</kbd></td><td>Вписать / скрыть панели</td></tr>
+    <tr><td><kbd>Space</kbd></td><td>Play / stop таймлайна</td></tr>
+    <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Кадр назад / вперёд (Shift — на 10)</td></tr>
     <tr><td>Shift + клик по холсту</td><td>Центр орбит (Orbit)</td></tr>
   </table>
   <p>Слайдеры: тяните влево/вправо (Shift — точная настройка), клик — ввод числа, двойной клик по названию — сброс. Кубик ⚄ в заголовке секции рандомизирует её параметры, ↺ — сбрасывает. Все размеры заданы в единицах ‰ от короткой стороны кадра, поэтому превью и экспорт в полном разрешении совпадают.</p>
@@ -448,8 +482,22 @@ const SCHEMA=[
   COL('asc.colB','Light color','#39ff88',{show:s=>s['asc.colorMode']!=='source'}),
   R('asc.imgMix','Image under text',0,0,1,.01),
   CHK('asc.rain','Rain fade (matrix)',false),
-  CHK('asc.animate','Animate',false,{noRand:true}),
-  R('asc.fps','Change rate',8,1,30,1,{show:s=>s['asc.animate'],noRand:true}),
+  CHK('asc.animate','Animate',false,{noRand:true,h:'Движение идёт от таймлайна: пробел — play'}),
+  SEL('asc.motion','Motion','flicker',[
+    ['flicker','Flicker characters'],
+    ['wave','Wave'],
+    ['drift','Drift'],
+    ['scrollx','Scroll X'],
+    ['scrolly','Scroll Y'],
+    ['reveal','Reveal'],
+  ],{show:s=>s['asc.animate'],noRand:true,h:'Wave и drift двигают символы. Scroll сдвигает картинку сквозь сетку. Reveal открывает кадр слева направо к концу диапазона.'}),
+  R('asc.speed','Speed',1,0,4,.05,{show:s=>s['asc.animate'],noRand:true}),
+  R('asc.amp','Amplitude',8,0,80,.5,{show:s=>s['asc.animate']&&(s['asc.motion']==='wave'||s['asc.motion']==='drift'),noRand:true,h:'Сдвиг в ячейках'}),
+  R('asc.freq','Frequency',1,.05,8,.05,{show:s=>s['asc.animate'],noRand:true,h:'Для Reveal: 1 = открыть ровно к последнему кадру'}),
+  R('asc.fps','Flicker rate',8,1,30,1,{show:s=>s['asc.animate'],noRand:true}),
+  R('asc.jitter','Jitter',0,0,1,.01,{show:s=>s['asc.animate'],noRand:true}),
+  R('asc.pulse','Scale pulse',0,0,1,.01,{show:s=>s['asc.animate'],noRand:true}),
+  R('asc.spin','Spin',0,0,90,1,{show:s=>s['asc.animate'],noRand:true,h:'Максимальный поворот символа, градусы'}),
   CHK('asc.svg','Include in SVG',true,{noRand:true,h:'Символы попадут в SVG как редактируемый текст'}),
  ]},
  {id:'slice',tab:'fx',title:'Grid Slicing & Offset',on:['sl.on',false],params:[
@@ -506,8 +554,7 @@ const SCHEMA=[
  ]},
  {id:'render',tab:'left',title:'Render',params:[
   R('rn.preview','Preview size',1400,400,3200,50,{noRand:true,h:'Длинная сторона превью, px'}),
-  R('rn.exportScale','Export scale',1,.25,4,.25,{noRand:true,h:'Множитель от исходного разрешения'}),
-  R('rn.recSec','Record seconds',6,1,30,1,{noRand:true}),
+  R('rn.exportScale','Export scale',1,.25,4,.25,{noRand:true,h:'Множитель от исходного разрешения. Секвенция пишется в этом размере.'}),
  ]},
 ];
 const DEF={seed:1337};
@@ -583,6 +630,8 @@ const FACTORY=[
 let IMG=null,imgCounter=0;
 let SHOWPTS=false,SHOWMAP=false,COMPARE=false,REC=null;
 let animT=0,lastFrame=0;
+const TL={fps:24,start:0,end:71,frame:0,acc:0,playing:false,loop:true,alpha:true,dir:null,dirName:''};
+let SEQ=false,SEQ_STOP=false;
 const CACHE={};
 function memo(name,key,fn){const c=CACHE[name];if(c&&c.key===key)return c.val;const val=fn();CACHE[name]={key,val};return val}
 function clearNS(ns){for(const k of Object.keys(CACHE))if(k.endsWith(ns))delete CACHE[k];for(const k of RGCACHE.keys())if(k.startsWith(ns+'|'))RGCACHE.delete(k);delete TMP[ns]}
@@ -816,30 +865,48 @@ const CHARSETS={ramp:' .:-=+*#%@',rampLong:" .'`^\",:;Il!i><~+_-?][}{1)(|/tfjrxn
   letters:'ABCDEFGHIJKLMNOPQRSTUVWXYZ',katakana:'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ012345789',blocks:' ░▒▓█',symbols:'+-×÷=<>/\\|#%&@*'};
 function ascSet(){if(S['asc.charset']==='custom'){const t=[...String(S['asc.text']).replace(/\s+/g,'')];return t.length?t:['#']}return[...(CHARSETS[S['asc.charset']]||CHARSETS.ramp)]}
 const fract=x=>x-Math.floor(x);
+const modn=(a,n)=>((a%n)+n)%n;
 function asciiLayer(W,H,ns,time,gl){
   const u=Math.min(W,H)/1000,cw=Math.max(2,S['asc.cell']*u),chh=cw*S['asc.aspect'];
   const cols=Math.max(1,Math.floor(W/cw)),rows=Math.max(1,Math.floor(H/chh));const ox=(W-cols*cw)/2,oy=(H-rows*chh)/2;
-  const anim=S['asc.animate'];const key=[K('asc.'),W,H,S.seed,anim||S['asc.rain']?time:0].join('|');
+  const anim=S['asc.animate'];const key=[K('asc.'),W,H,S.seed,anim||S['asc.rain']?time:0,TL.start,TL.end,TL.fps].join('|');
   const c=CACHE['asc'+ns];if(c&&c.src===gl&&c.key===key)return c.val;
   const t=mk(cols,rows),tg=ctx2d(t);tg.imageSmoothingQuality='high';tg.drawImage(gl,0,0,cols,rows);const d=tg.getImageData(0,0,cols,rows).data;
   const set=ascSet(),n=set.length,mode=S['asc.order'],txt=[...(String(S['asc.text']).replace(/\s+/g,' ')||'#')];
   const A=hexToRgb(S['asc.colA']),B=hexToRgb(S['asc.colB']),cm=S['asc.colorMode'],ct=1+S['asc.contrast'],cut=S['asc.minLum'],inv=S['asc.invert'];
   const fs=Math.min(chh*.95,cw/.6),fps=S['asc.fps'],seed=S.seed|0,cells=[];let ti=0;
-  for(let r=0;r<rows;r++)for(let q=0;q<cols;q++){const i=(r*cols+q)*4,ci=r*cols+q;
+  const motion=S['asc.motion'],tt=time*(S['asc.speed']||0),freq=S['asc.freq']||1;
+  const span=Math.max(1,TL.end-TL.start);
+  const reveal=anim&&motion==='reveal'?clamp((TL.frame-TL.start)/span*Math.max(.05,freq),0,1):1;
+  for(let r=0;r<rows;r++)for(let q=0;q<cols;q++){const ci=r*cols+q;
+    if(reveal<1&&(ci+1)/(cols*rows)>reveal)continue;
+    let sq=q,sr=r;
+    if(anim&&motion==='scrollx')sq=modn(q+Math.floor(tt*fps),cols);
+    else if(anim&&motion==='scrolly')sr=modn(r+Math.floor(tt*fps),rows);
+    const i=(sr*cols+sq)*4;
     let l=(d[i]*.299+d[i+1]*.587+d[i+2]*.114)/255;l=clamp((l-.5)*ct+.5,0,1);if(inv)l=1-l;if(l<cut)continue;
     let ch,a=1;
     if(mode==='text'){ch=txt[ti++%txt.length];a=.35+.65*l}
-    else if(mode==='random'){const fr=anim?Math.floor(time*fps*(.3+hash2(ci,seed^0x77)*1.4)):0;ch=set[Math.floor(hash2(ci*31+fr*7919,seed)*n)];a=.25+.75*l}
+    else if(mode==='random'){const fr=anim&&motion==='flicker'?Math.floor(tt*fps*(.3+hash2(ci,seed^0x77)*1.4)):0;ch=set[Math.floor(hash2(ci*31+fr*7919,seed)*n)];a=.25+.75*l}
     else ch=set[Math.min(n-1,Math.floor(l*n))];
     if(ch===' '||ch===undefined)continue;
-    if(S['asc.rain']){const v=fract(hash2(q,seed^0x5a)+time*.25*(.5+hash2(q,seed^0x3c))-r/rows*1.3);a*=.12+.88*Math.pow(v,2.2)}
-    const sz=S['asc.scale']?fs*(.35+.65*l):fs;let col;
+    if(S['asc.rain']){const v=fract(hash2(q,seed^0x5a)+tt*.25*(.5+hash2(q,seed^0x3c))-r/rows*1.3);a*=.12+.88*Math.pow(v,2.2)}
+    let sz=S['asc.scale']?fs*(.35+.65*l):fs,dx=0,dy=0,ang=0;
+    if(anim){
+      const ax=S['asc.amp']*cw,ay=S['asc.amp']*chh;
+      if(motion==='wave'){dx+=Math.sin(r/rows*freq*TAU+tt*TAU)*ax;dy+=Math.cos(q/cols*freq*TAU+tt*TAU)*ay*.45}
+      else if(motion==='drift'){dx+=Math.sin(tt*TAU*freq)*ax;dy+=Math.cos(tt*TAU*freq*.73)*ay}
+      if(S['asc.jitter']>0){const jf=Math.floor(tt*fps);dx+=(hash2(ci+1,seed^jf)-.5)*2*S['asc.jitter']*cw;dy+=(hash2(ci+2,seed^jf)-.5)*2*S['asc.jitter']*chh}
+      if(S['asc.pulse']>0)sz*=1+Math.sin(tt*TAU*Math.max(.1,freq)+q*.35)*S['asc.pulse'];
+      if(S['asc.spin']>0)ang=Math.sin(tt*TAU*Math.max(.1,freq)+r*.4)*S['asc.spin']*Math.PI/180}
+    let col;
     if(cm==='source')col=`rgb(${d[i]},${d[i+1]},${d[i+2]})`;
     else if(cm==='mono')col=S['asc.colB'];
     else col=`rgb(${A[0]+(B[0]-A[0])*l|0},${A[1]+(B[1]-A[1])*l|0},${A[2]+(B[2]-A[2])*l|0})`;
-    cells.push({x:ox+(q+.5)*cw,y:oy+(r+.5)*chh,ch,col,a,sz})}
+    cells.push({x:ox+(q+.5)*cw,y:oy+(r+.5)*chh,ch,col,a,sz,dx,dy,ang})}
   const cv2=mk(W,H),g=cv2.getContext('2d');g.textAlign='center';g.textBaseline='alphabetic';const wt=S['asc.bold']?'700 ':'';let cur=-1;
-  for(const e of cells){if(e.sz!==cur){cur=e.sz;g.font=`${wt}${e.sz.toFixed(2)}px ${MONO}`}g.globalAlpha=e.a;g.fillStyle=e.col;g.fillText(e.ch,e.x,e.y+e.sz*.35)}
+  for(const e of cells){if(e.sz!==cur){cur=e.sz;g.font=`${wt}${e.sz.toFixed(2)}px ${MONO}`}
+    g.save();g.translate(e.x+e.dx,e.y+e.dy+e.sz*.35);if(e.ang)g.rotate(e.ang);g.globalAlpha=e.a;g.fillStyle=e.col;g.fillText(e.ch,0,0);g.restore()}
   const val={canvas:cv2,cells,fs};CACHE['asc'+ns]={src:gl,key,val};return val}
 
 /* ============================== region (lens) boxes ============================== */
@@ -1051,41 +1118,48 @@ function tmpCanvas(ns,W,H){let c=TMP[ns];if(!c||c.width!==W||c.height!==H)c=TMP[
 function scanlines(g,W,H,u){const gap=Math.max(2,S['px.scanGap']*u),th=Math.max(1,S['px.scanThick']*u);g.fillStyle=`rgba(0,0,0,${S['px.scanOpacity']})`;for(let y=0;y<H;y+=gap)g.fillRect(0,y,W,Math.min(th,gap-.5))}
 function renderComposite(out,W,H,o){
   const g=out.getContext('2d'),u=Math.min(W,H)/1000;g.setTransform(1,0,0,1,0,0);g.globalCompositeOperation='source-over';g.globalAlpha=1;
-  const scan=S['px.on']&&S['px.scan'];
-  if(o.overlayOnly)g.clearRect(0,0,W,H);
-  else{g.fillStyle=S['bs.bg'];g.fillRect(0,0,W,H);const gl=glitchStage(W,H,o.ns,o.time);
+  const scan=S['px.on']&&S['px.scan'],alpha=!!o.alpha;
+  if(o.overlayOnly||alpha)g.clearRect(0,0,W,H);
+  if(!o.overlayOnly){
+    if(!alpha){g.fillStyle=S['bs.bg'];g.fillRect(0,0,W,H)}
+    const gl=glitchStage(W,H,o.ns,o.time);
     if(S['asc.on']){const a=S['bs.opacity']*S['asc.imgMix'];if(a>0){g.globalAlpha=a;g.drawImage(gl,0,0)}g.globalAlpha=1;g.drawImage(asciiLayer(W,H,o.ns,o.time,gl).canvas,0,0)}
     else{g.globalAlpha=S['bs.opacity'];g.drawImage(gl,0,0)}g.globalAlpha=1;
-    if(scan&&!S['px.scanTop'])scanlines(g,W,H,u);
-    if(S['bs.vignette']>0){const gr=g.createRadialGradient(W/2,H/2,Math.min(W,H)*.3,W/2,H/2,Math.hypot(W,H)/2);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,`rgba(0,0,0,${S['bs.vignette']})`);g.fillStyle=gr;g.fillRect(0,0,W,H)}}
+    if(!alpha&&scan&&!S['px.scanTop'])scanlines(g,W,H,u);
+    if(!alpha&&S['bs.vignette']>0){const gr=g.createRadialGradient(W/2,H/2,Math.min(W,H)*.3,W/2,H/2,Math.hypot(W,H)/2);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,`rgba(0,0,0,${S['bs.vignette']})`);g.fillStyle=gr;g.fillRect(0,0,W,H)}}
   const ov=buildOverlay(W,H,o.time,o.ns);
   for(const im of ov.imgs)g.drawImage(im.cv,im.x,im.y,im.w,im.h);
   const oc=tmpCanvas(o.ns,W,H),og=oc.getContext('2d');og.setTransform(1,0,0,1,0,0);og.clearRect(0,0,W,H);renderPrims(og,ov.prims,u);
-  g.globalCompositeOperation=o.overlayOnly?'source-over':S['st.blend'];g.globalAlpha=S['st.opacity'];g.drawImage(oc,0,0);
+  g.globalCompositeOperation=(o.overlayOnly||alpha)?'source-over':S['st.blend'];g.globalAlpha=S['st.opacity'];g.drawImage(oc,0,0);
   g.globalCompositeOperation='source-over';g.globalAlpha=1;
-  if(scan&&S['px.scanTop']&&!o.overlayOnly)scanlines(g,W,H,u);
+  if(!alpha&&scan&&S['px.scanTop']&&!o.overlayOnly)scanlines(g,W,H,u);
   return ov}
 
 /* ============================== preview loop ============================== */
 const cv=$('#cv'),view=$('#view');
 let pending=false;
-const animActive=()=>!!REC||(S['wp.on']&&S['wp.animate'])||(S['sl.on']&&S['sl.animate'])||(S['asc.on']&&S['asc.animate']);
-function requestRender(){if(pending)return;pending=true;requestAnimationFrame(doRender)}
+const animActive=()=>!!REC||TL.playing;
+function requestRender(){if(pending||SEQ)return;pending=true;requestAnimationFrame(doRender)}
 function previewSize(){const k=Math.min(1,S['rn.preview']/Math.max(IMG.w,IMG.h));return{W:Math.max(1,Math.round(IMG.w*k)),H:Math.max(1,Math.round(IMG.h*k))}}
 function doRender(now){
-  pending=false;if(!IMG)return;const t0=performance.now();
-  if(animActive()){const dt=lastFrame?Math.min(.1,(now-lastFrame)/1000):0;animT+=dt;lastFrame=now}else lastFrame=0;
+  pending=false;if(!IMG||SEQ)return;const t0=performance.now();
+  if(TL.playing||REC){const dt=lastFrame?Math.min(.1,(now-lastFrame)/1000):0;lastFrame=now;TL.acc=Math.min(.5,TL.acc+dt);const sp=1/TL.fps;let guard=0;
+    while(TL.acc>=sp&&guard++<8){TL.acc-=sp;TL.frame++;
+      if(TL.frame>TL.end){if(TL.loop&&!REC)TL.frame=TL.start;else{TL.frame=TL.end;TL.playing=false;TL.acc=0;if(REC){try{REC.stop()}catch(e){}}}}
+    }
+    syncTlUI()}else lastFrame=0;
+  animT=TL.frame/TL.fps;
   const{W,H}=previewSize();if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H;fitView()}
   let ov={prims:[],edges:0};const g=cv.getContext('2d');
   try{
     if(COMPARE){g.globalCompositeOperation='source-over';g.globalAlpha=1;g.drawImage(IMG.el,0,0,W,H)}
-    else{ov=renderComposite(cv,W,H,{ns:'P',time:animT});
+    else{ov=renderComposite(cv,W,H,{ns:'P',time:animT,alpha:TL.alpha});
       if(SHOWMAP){g.save();g.globalAlpha=.88;g.imageSmoothingEnabled=true;g.fillStyle='rgba(0,0,0,.55)';g.fillRect(0,0,W,H);g.drawImage(getHeat(),0,0,W,H);g.restore()}
       if(SHOWPTS||SHOWMAP){g.fillStyle=SHOWMAP?'#38f0ff':'#ff2d6f';const pts=getPoints(),s=Math.max(2,Math.min(W,H)/400);for(const p of pts)g.fillRect(p.x*W-s/2,p.y*H-s/2,s,s)}
       if(rgEditOn())drawRgHandles(g)}
   }catch(e){console.error(e);setState('error','busy')}
   const ms=performance.now()-t0;
-  $('#stPrev').textContent=`${W}×${H}`;$('#stPts').textContent=getPoints().length;$('#stEdges').textContent=ov.edges||0;$('#stPrims').textContent=ov.prims.length;$('#stMs').textContent=ms.toFixed(1);
+  $('#stPrev').textContent=`${W}×${H}`;$('#stPts').textContent=getPoints().length;$('#stEdges').textContent=ov.edges||0;$('#stPrims').textContent=ov.prims.length;$('#stMs').textContent=ms.toFixed(1);$('#stFrame').textContent=TL.frame;
   setState(animActive()?(REC?'recording':'animating'):'ready',animActive()?'anim':'');
   if(animActive())requestRender()}
 function setState(t,cls){$('#stState').textContent=t;$('#stDot').className=cls||''}
@@ -1306,7 +1380,8 @@ async function exportSVG(){if(!IMG||busy)return;busy=true;setState('exporting…
     let out=`<?xml version="1.0" encoding="UTF-8"?>\n<!-- GLITCH.LAB vector overlay · seed ${S.seed} · ${new Date().toISOString()} -->\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">\n`;
     if(S['asc.on']&&S['asc.svg']){const L=asciiLayer(W,H,'E',animT,glitchStage(W,H,'E',animT));
       out+=`<g id="ascii" font-family="JetBrains Mono, SF Mono, Menlo, Consolas, monospace" font-weight="${S['asc.bold']?700:400}" text-anchor="middle"${S['asc.scale']?'':` font-size="${f(L.fs)}"`}>\n`;
-      for(const c of L.cells)out+=`<text x="${f(c.x)}" y="${f(c.y+c.sz*.35)}"${S['asc.scale']?` font-size="${f(c.sz)}"`:''} fill="${c.col}"${c.a<.99?` opacity="${f(c.a)}"`:''}>${esc(c.ch)}</text>\n`;
+      for(const c of L.cells){const tx=c.x+(c.dx||0),ty=c.y+(c.dy||0)+c.sz*.35,rot=c.ang?` transform="rotate(${f(c.ang*180/Math.PI)} ${f(tx)} ${f(ty)})"`:'';
+        out+=`<text x="${f(tx)}" y="${f(ty)}"${rot}${S['asc.scale']||c.sz!==L.fs?` font-size="${f(c.sz)}"`:''} fill="${c.col}"${c.a<.99?` opacity="${f(c.a)}"`:''}>${esc(c.ch)}</text>\n`}
       out+=`</g>\n`}
     if(S['rg.on']&&S['rg.svgEmbed']&&ov.imgs.length){out+=`<g id="lens_boxes">\n`;for(const im of ov.imgs)out+=`<image x="${f(im.x)}" y="${f(im.y)}" width="${f(im.w)}" height="${f(im.h)}" preserveAspectRatio="none" xlink:href="${im.cv.toDataURL('image/png')}"/>\n`;out+=`</g>\n`}
     out+=`<g id="overlay" stroke-linecap="round" stroke-linejoin="round" opacity="${f(S['st.opacity'])}" style="mix-blend-mode:${blend}">\n`;
@@ -1314,17 +1389,66 @@ async function exportSVG(){if(!IMG||busy)return;busy=true;setState('exporting…
     download(new Blob([out],{type:'image/svg+xml'}),`glitchlab_overlay_${S.seed}_${stamp()}.svg`);toast(`SVG ${W}×${H} · ${ov.prims.length} vectors`,'ok')}
   catch(e){console.error(e);toast('Ошибка SVG: '+e.message,'err')}
   clearNS('E');busy=false;requestRender()}
+function tlCount(){return TL.end-TL.start+1}
+function tlClamp(){TL.fps=clamp(Math.round(+TL.fps)||24,1,60);TL.start=Math.round(+TL.start)||0;TL.end=Math.round(+TL.end);if(TL.end<TL.start)TL.end=TL.start;if(TL.end>TL.start+899)TL.end=TL.start+899;TL.frame=clamp(Math.round(+TL.frame),TL.start,TL.end);TL.loop=!!TL.loop;TL.alpha=!!TL.alpha}
+function saveTl(){try{localStorage.setItem('glitchlab.tl.v1',JSON.stringify({fps:TL.fps,start:TL.start,end:TL.end,frame:TL.frame,loop:TL.loop,alpha:TL.alpha}))}catch(e){}}
+function loadTl(){try{const s=JSON.parse(localStorage.getItem('glitchlab.tl.v1')||'null');if(s&&typeof s==='object'){for(const k of ['fps','start','end','frame','loop','alpha'])if(s[k]!=null)TL[k]=s[k]}}catch(e){}tlClamp()}
+function syncTlUI(){const n=tlCount(),sec=(n/TL.fps).toFixed(2);const set=(id,v)=>{const el=$('#'+id);if(el&&document.activeElement!==el)el.value=v};
+  set('tlFrame',TL.frame);set('tlFps',TL.fps);set('tlStart',TL.start);set('tlEnd',TL.end);set('tlCount',n);
+  const sc=$('#tlScrub');if(sc){sc.min=TL.start;sc.max=TL.end;if(document.activeElement!==sc)sc.value=TL.frame}
+  const p=$('#tlPlay');if(p)p.textContent=TL.playing?'❚❚':'▶';
+  const loop=$('#tlLoop');if(loop)loop.checked=!!TL.loop;const al=$('#tlAlpha');if(al)al.checked=!!TL.alpha;
+  const info=$('#tlInfo');if(info)info.textContent=n+'f · '+sec+'s';
+  const dn=$('#tlDirName');if(dn)dn.textContent=TL.dirName?TL.dirName:'папка не выбрана — скачается zip';
+  const fr=$('#stFrame');if(fr)fr.textContent=TL.frame}
+function tlApply(part){tlClamp();
+  if(part==='count'){const n=clamp(Math.round(+$('#tlCount').value)||1,1,900);TL.end=TL.start+n-1;TL.frame=clamp(TL.frame,TL.start,TL.end)}
+  animT=TL.frame/TL.fps;saveTl();syncTlUI();requestRender()}
+function tlToggle(){if(SEQ)return;TL.playing=!TL.playing;if(TL.playing){TL.acc=0;lastFrame=0;if(TL.frame>=TL.end)TL.frame=TL.start}syncTlUI();requestRender()}
+function tlStep(d){if(SEQ)return;TL.playing=false;TL.frame=clamp(TL.frame+d,TL.start,TL.end);animT=TL.frame/TL.fps;saveTl();syncTlUI();requestRender()}
+async function chooseDir(){if(!window.showDirectoryPicker){toast('Этот браузер не открывает папку — секвенция скачается zip-архивом');return null}
+  try{const dir=await showDirectoryPicker({mode:'readwrite',id:'glitchlab'});TL.dir=dir;TL.dirName=dir.name;syncTlUI();return dir}
+  catch(e){if(e&&e.name!=='AbortError')toast(String(e.message||e),'err');return null}}
+function crc32(u){let c=~0>>>0;for(let i=0;i<u.length;i++){c^=u[i];for(let k=0;k<8;k++)c=(c>>>1)^(0xEDB88320&-(c&1))}return (~c)>>>0}
+function zipStore(files){const enc=new TextEncoder(),parts=[],central=[];let offset=0;
+  for(const f of files){const name=enc.encode(f.name),data=f.data,crc=crc32(data);
+    const lh=new Uint8Array(30+name.length),v=new DataView(lh.buffer);v.setUint32(0,0x04034b50,true);v.setUint16(4,20,true);v.setUint32(14,crc,true);v.setUint32(18,data.length,true);v.setUint32(22,data.length,true);v.setUint16(26,name.length,true);lh.set(name,30);
+    parts.push(lh,data);const ch=new Uint8Array(46+name.length),c=new DataView(ch.buffer);c.setUint32(0,0x02014b50,true);c.setUint16(4,20,true);c.setUint16(6,20,true);c.setUint32(16,crc,true);c.setUint32(20,data.length,true);c.setUint32(24,data.length,true);c.setUint16(28,name.length,true);c.setUint32(42,offset,true);ch.set(name,46);central.push(ch);offset+=lh.length+data.length}
+  let csize=0;for(const c of central)csize+=c.length;const e=new Uint8Array(22),ev=new DataView(e.buffer);ev.setUint32(0,0x06054b50,true);ev.setUint16(8,files.length,true);ev.setUint16(10,files.length,true);ev.setUint32(12,csize,true);ev.setUint32(16,offset,true);
+  return new Blob([...parts,...central,e],{type:'application/zip'})}
+function pngBlob(c){return new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('png')),'image/png'))}
+async function exportSequence(){if(!IMG||busy)return;tlClamp();const n=tlCount();
+  if(n>900){toast('Максимум 900 кадров','err');return}
+  let dir=TL.dir;
+  if(!dir&&window.showDirectoryPicker){dir=await chooseDir();if(!dir)return}
+  if(dir&&dir.requestPermission){let perm='granted';try{perm=await dir.requestPermission({mode:'readwrite'})}catch(e){perm='denied'}if(perm!=='granted'){toast('Нет доступа к папке','err');return}}
+  if(!dir&&n>180){toast('Для длинной секвенции выбери папку. Zip ограничен 180 кадрами.','err');return}
+  busy=true;SEQ=true;SEQ_STOP=false;TL.playing=false;syncTlUI();
+  const btn=$('#bSeq');btn.textContent='■ Stop';btn.classList.add('rec');
+  const{W,H}=exportSize();const files=[];const tname=TL.alpha?'alpha':'rgba';
+  try{toast(dir?`Пишу ${n} PNG в «${TL.dirName}»`:`Собираю ${n} PNG…`);
+    for(let f=TL.start;f<=TL.end;f++){if(SEQ_STOP)break;TL.frame=f;animT=f/TL.fps;syncTlUI();setState(`seq ${f-TL.start+1}/${n}`,'busy');
+      clearNS('E');RGCACHE.clear();const c=mk(W,H);renderComposite(c,W,H,{ns:'E',time:animT,alpha:TL.alpha});
+      const blob=await pngBlob(c);const name=`glitch_${String(f).padStart(5,'0')}.png`;
+      if(dir){const fh=await dir.getFileHandle(name,{create:true});const w=await fh.createWritable();await w.write(blob);await w.close()}
+      else files.push({name,data:new Uint8Array(await blob.arrayBuffer())});
+      const pv=previewSize();if(cv.width!==pv.W||cv.height!==pv.H){cv.width=pv.W;cv.height=pv.H}
+      const g=cv.getContext('2d');g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,cv.width,cv.height);g.drawImage(c,0,0,cv.width,cv.height);await nextFrame()}
+    if(!SEQ_STOP&&!dir&&files.length)download(zipStore(files),`glitchlab_${tname}_${stamp()}.zip`);
+    toast(SEQ_STOP?'Остановлено':(dir?`Готово: ${tlCount()} PNG в «${TL.dirName}»`:`Zip ${files.length} PNG`)+(TL.alpha?' · alpha':''),'ok')}
+  catch(e){console.error(e);toast('Секвенция: '+(e.message||e),'err')}
+  clearNS('E');SEQ=false;SEQ_STOP=false;busy=false;btn.classList.remove('rec');btn.textContent='Sequence';requestRender()}
 function toggleRecord(){const btn=$('#bRec');
   if(REC){REC.stop();return}
+  if(SEQ)return;
   if(!cv.captureStream||!window.MediaRecorder){toast('Запись не поддерживается браузером','err');return}
   const mime=['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm','video/mp4'].find(m=>MediaRecorder.isTypeSupported(m));
   if(!mime){toast('Нет поддерживаемого видеокодека','err');return}
-  const rec=new MediaRecorder(cv.captureStream(30),{mimeType:mime,videoBitsPerSecond:16e6});const chunks=[];
+  tlClamp();TL.frame=TL.start;TL.acc=0;TL.playing=true;lastFrame=0;animT=TL.frame/TL.fps;
+  const rec=new MediaRecorder(cv.captureStream(TL.fps),{mimeType:mime,videoBitsPerSecond:16e6});const chunks=[];
   rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
-  rec.onstop=()=>{download(new Blob(chunks,{type:mime}),`glitchlab_${S.seed}_${stamp()}.${mime.includes('mp4')?'mp4':'webm'}`);REC=null;btn.classList.remove('rec');btn.textContent='● Rec';toast('Video saved','ok');requestRender()};
-  rec.start(200);REC=rec;btn.classList.add('rec');btn.textContent='■ Stop';
-  if(!(S['wp.on']&&S['wp.animate'])&&!(S['sl.on']&&S['sl.animate']))toast('Совет: включите Warp → Animate или Slicing → Animate для движения');
-  requestRender();setTimeout(()=>{if(REC===rec)rec.stop()},S['rn.recSec']*1000)}
+  rec.onstop=()=>{download(new Blob(chunks,{type:mime}),`glitchlab_${S.seed}_${stamp()}.${mime.includes('mp4')?'mp4':'webm'}`);REC=null;TL.playing=false;btn.classList.remove('rec');btn.textContent='● Rec';syncTlUI();toast('Видео превью сохранено. Альфа — кнопка Sequence.','ok');requestRender()};
+  rec.start(200);REC=rec;btn.classList.add('rec');btn.textContent='■ Stop';syncTlUI();requestRender()}
 
 /* ============================== toasts / misc ============================== */
 function toast(msg,type){const t=document.createElement('div');t.className='toast '+(type||'');t.textContent=msg;$('#toasts').append(t);while($('#toasts').children.length>4)$('#toasts').firstChild.remove();
@@ -1342,6 +1466,7 @@ function init(){
   let saved=null;try{saved=JSON.parse(localStorage.getItem(LS_S))}catch(e){}
   S={...DEF};if(saved)saved=migrate(saved);if(saved)for(const k in saved)if(k in DEF&&typeof saved[k]===typeof DEF[k])S[k]=saved[k];
   syncAll();pushHistory();renderPresets();
+  loadTl();syncTlUI();
   setImage(demoImage(),'demo.png');
 
   const fi=$('#fileImg'),fj=$('#fileJson');
@@ -1352,6 +1477,15 @@ function init(){
   $('#bPngOv').onclick=$('#bPngOv2').onclick=()=>exportPNG(true);
   $('#bSvg').onclick=$('#bSvg2').onclick=exportSVG;
   $('#bRec').onclick=toggleRecord;
+  $('#tlPlay').onclick=tlToggle;
+  $('#tlScrub').addEventListener('input',()=>{TL.playing=false;TL.frame=+$('#tlScrub').value;animT=TL.frame/TL.fps;saveTl();syncTlUI();requestRender()});
+  const tlNum=(id,apply)=>{const el=$('#'+id);el.addEventListener('change',()=>{apply(+el.value);tlClamp();animT=TL.frame/TL.fps;saveTl();syncTlUI();requestRender()});el.addEventListener('keydown',e=>e.stopPropagation())};
+  tlNum('tlFrame',v=>{TL.frame=v});tlNum('tlFps',v=>{TL.fps=v});tlNum('tlStart',v=>{TL.start=v});tlNum('tlEnd',v=>{TL.end=v});
+  tlNum('tlCount',v=>{TL.end=TL.start+clamp(Math.round(v)||1,1,900)-1});
+  $('#tlLoop').addEventListener('change',()=>{TL.loop=$('#tlLoop').checked;saveTl()});
+  $('#tlAlpha').addEventListener('change',()=>{TL.alpha=$('#tlAlpha').checked;saveTl();requestRender()});
+  $('#tlDir').onclick=()=>chooseDir();
+  $('#bSeq').onclick=()=>{if(SEQ){SEQ_STOP=true;return}exportSequence()};
   $('#bSeed').onclick=randomizeSeed;$('#bMutate').onclick=mutate;
   $('#seed').addEventListener('change',e=>{const v=parseInt(e.target.value,10);if(isFinite(v))setParam('seed',v)});
   $('#seed').addEventListener('keydown',e=>e.stopPropagation());
@@ -1383,6 +1517,8 @@ function init(){
     if(mod&&k==='y'){e.preventDefault();redo();return}
     if(mod&&k==='s'){e.preventDefault();e.shiftKey?exportSVG():exportPNG(false);return}
     if(mod)return;
+    if(e.key===' '||e.code==='Space'){e.preventDefault();tlToggle();return}
+    if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();tlStep((e.key==='ArrowRight'?1:-1)*(e.shiftKey?10:1));return}
     if(k==='r')randomizeSeed();else if(k==='m')mutate();else if(k==='o')$('#fileImg').click();
     else if(k==='p')$('#bPts').click();else if(k==='g')$('#bMap').click();else if(k==='f')fitView();else if(k==='h')panels();
     else if(e.key==='\\')cmp(true);else if(e.key==='?')modal.classList.toggle('hidden');else if(e.key==='Escape')modal.classList.add('hidden');
