@@ -490,9 +490,9 @@ const SCHEMA=[
   R('hud.grid','Guide grid',0,0,40,1,{h:'0 = выкл.'}),
  ]},
  {id:'ascii',tab:'fx',title:'ASCII / Text Render',on:['asc.on',false],open:true,params:[
-  SEL('asc.order','Char choice','density',[['density','By brightness (density)'],['random','Random from set'],['text','Your text in sequence']],{h:'By brightness — символ зависит от яркости.\nRandom — случайный символ из набора (зависит от seed).\nYour text — ваш текст построчно заполняет кадр'}),
-  SEL('asc.charset','Characters','digits',[['ramp','Classic ramp  .:-=+*#%@'],['rampLong','Long ramp (70 chars)'],['digits','Digits 0–9'],['binary','Binary 01'],['hex','Hex 0–F'],['letters','Letters A–Z'],['katakana','Katakana (matrix)'],['blocks','Blocks ░▒▓█'],['symbols','Symbols +-×÷<>'],['custom','Custom set (from text)']],{show:s=>s['asc.order']!=='text'}),
-  TXT('asc.text','Text','GLITCH.LAB SIGNAL / NOISE / DATA 2026 ',{show:s=>s['asc.order']==='text'||s['asc.charset']==='custom',h:'Your text: фраза повторяется по кадру. Custom set: символы этой строки — набор'}),
+  SEL('asc.order','Char choice','density',[['density','By brightness (density)'],['random','Random from set'],['text','Your text in sequence'],['words','Your words']],{h:'By brightness — символ зависит от яркости.\nRandom — случайный символ из набора.\nYour text — фраза по буквам.\nYour words — каждое слово из Text ставится целиком и случайно.'}),
+  SEL('asc.charset','Characters','digits',[['ramp','Classic ramp  .:-=+*#%@'],['rampLong','Long ramp (70 chars)'],['digits','Digits 0–9'],['binary','Binary 01'],['hex','Hex 0–F'],['letters','Letters A–Z'],['katakana','Katakana (matrix)'],['blocks','Blocks ░▒▓█'],['symbols','Symbols +-×÷<>'],['custom','Custom set (from text)']],{show:s=>s['asc.order']!=='text'&&s['asc.order']!=='words'}),
+  TXT('asc.text','Text','GLITCH.LAB SIGNAL / NOISE / DATA 2026 ',{show:s=>s['asc.order']==='text'||s['asc.order']==='words'||s['asc.charset']==='custom',h:'Your words: слова через пробел, запятую или с новой строки — каждое слово целиком.\nYour text: фраза по буквам.\nCustom set: строка без пробелов — набор символов. Несколько слов — тоже ставятся целиком.'}),
   R('asc.cell','Cell size',9,2,60,.5),
   R('asc.aspect','Cell aspect',1.6,.8,2.5,.05,{h:'Высота ячейки / ширина'}),
   R('asc.contrast','Contrast',.2,-1,2,.01),
@@ -898,6 +898,8 @@ function pixelPass(src,W,H,warp,rgb,grain){
 const CHARSETS={ramp:' .:-=+*#%@',rampLong:" .'`^\",:;Il!i><~+_-?][}{1)(|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$",digits:'1742365980',binary:'01',hex:'0123456789ABCDEF',
   letters:'ABCDEFGHIJKLMNOPQRSTUVWXYZ',katakana:'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ012345789',blocks:' ░▒▓█',symbols:'+-×÷=<>/\\|#%&@*'};
 function ascSet(){if(S['asc.charset']==='custom'){const t=[...String(S['asc.text']).replace(/\s+/g,'')];return t.length?t:['#']}return[...(CHARSETS[S['asc.charset']]||CHARSETS.ramp)]}
+function ascWordList(raw){const s=String(raw||'').trim();if(!s)return[];const parts=/[,;\n|]/.test(s)?s.split(/[,;\n|]+/):s.split(/\s+/);return parts.map(x=>x.trim()).filter(Boolean)}
+function ascWords(){const words=ascWordList(S['asc.text']);if(S['asc.order']==='words')return words.length?words:['#'];if(S['asc.order']!=='text'&&S['asc.charset']==='custom'&&words.length>1)return words;return null}
 const fract=x=>x-Math.floor(x);
 const modn=(a,n)=>((a%n)+n)%n;
 function asciiLayer(W,H,ns,time,gl){
@@ -906,13 +908,45 @@ function asciiLayer(W,H,ns,time,gl){
   const anim=S['asc.animate'];const key=[K('asc.'),W,H,S.seed,anim||S['asc.rain']?time:0,TL.start,TL.end,TL.fps].join('|');
   const c=CACHE['asc'+ns];if(c&&c.src===gl&&c.key===key)return c.val;
   const t=mk(cols,rows),tg=ctx2d(t);tg.imageSmoothingQuality='high';tg.drawImage(gl,0,0,cols,rows);const d=tg.getImageData(0,0,cols,rows).data;
-  const set=ascSet(),n=set.length,mode=S['asc.order'],txt=[...(String(S['asc.text']).replace(/\s+/g,' ')||'#')];
+  const words=ascWords(),set=words||ascSet(),n=set.length,mode=S['asc.order'],txt=words||[...(String(S['asc.text']).replace(/\s+/g,' ')||'#')];
   const A=hexToRgb(S['asc.colA']),B=hexToRgb(S['asc.colB']),cm=S['asc.colorMode'],ct=1+S['asc.contrast'],cut=S['asc.minLum'],inv=S['asc.invert'];
-  const fs=Math.min(chh*.95,cw/.6),fps=S['asc.fps'],seed=S.seed|0,cells=[];let ti=0;
+  let fs=Math.min(chh*.95,cw/.6);const fps=S['asc.fps'],seed=S.seed|0,cells=[];let ti=0;
   const motion=S['asc.motion'],tt=time*(S['asc.speed']||0),freq=S['asc.freq']||1;
   const span=Math.max(1,TL.end-TL.start);
   const reveal=anim&&motion==='reveal'?clamp((TL.frame-TL.start)/span*Math.max(.05,freq),0,1):1;
-  for(let r=0;r<rows;r++)for(let q=0;q<cols;q++){const ci=r*cols+q;
+  const pushCell=(q,r,ci,ch,sz,wide)=>{
+    let sq=q,sr=r;
+    if(anim&&motion==='scrollx')sq=modn(q+Math.floor(tt*fps),cols);
+    else if(anim&&motion==='scrolly')sr=modn(r+Math.floor(tt*fps),rows);
+    const i=(sr*cols+sq)*4;
+    let l=(d[i]*.299+d[i+1]*.587+d[i+2]*.114)/255;l=clamp((l-.5)*ct+.5,0,1);if(inv)l=1-l;
+    if(l<cut||ch===' '||ch===undefined)return false;
+    let a=(mode==='text'?0.35:0.45)+l*(mode==='text'?0.65:0.55);
+    if(S['asc.rain']){const v=fract(hash2(q,seed^0x5a)+tt*.25*(.5+hash2(q,seed^0x3c))-r/rows*1.3);a*=.12+.88*Math.pow(v,2.2)}
+    let use=S['asc.scale']?sz*(.55+.45*l):sz,dx=0,dy=0,ang=0;
+    if(anim){
+      const ax=S['asc.amp']*cw,ay=S['asc.amp']*chh;
+      if(motion==='wave'){dx+=Math.sin(r/rows*freq*TAU+tt*TAU)*ax;dy+=Math.cos(q/cols*freq*TAU+tt*TAU)*ay*.45}
+      else if(motion==='drift'){dx+=Math.sin(tt*TAU*freq)*ax;dy+=Math.cos(tt*TAU*freq*.73)*ay}
+      if(S['asc.jitter']>0){const jf=Math.floor(tt*fps);dx+=(hash2(ci+1,seed^jf)-.5)*2*S['asc.jitter']*cw;dy+=(hash2(ci+2,seed^jf)-.5)*2*S['asc.jitter']*chh}
+      if(S['asc.pulse']>0)use*=1+Math.sin(tt*TAU*Math.max(.1,freq)+q*.35)*S['asc.pulse'];
+      if(S['asc.spin']>0)ang=Math.sin(tt*TAU*Math.max(.1,freq)+r*.4)*S['asc.spin']*Math.PI/180}
+    let col;if(cm==='source')col=`rgb(${d[i]},${d[i+1]},${d[i+2]})`;
+    else if(cm==='mono')col=S['asc.colB'];
+    else col=`rgb(${A[0]+(B[0]-A[0])*l|0},${A[1]+(B[1]-A[1])*l|0},${A[2]+(B[2]-A[2])*l|0})`;
+    cells.push({x:ox+(q+wide/2)*cw,y:oy+(r+.5)*chh,ch,col,a,sz:use,dx,dy,ang});return true};
+  if(words){fs=Math.max(4,chh*.78);const wt=S['asc.bold']?'700 ':'';tg.font=`${wt}${fs.toFixed(2)}px ${MONO}`;
+    const widths=words.map(w=>Math.max(cw,tg.measureText(w).width)),nw=words.length;
+    for(let r=0;r<rows;r++){let q=0;while(q<cols){const ci=r*cols+q;
+      if(reveal<1&&(ci+1)/(cols*rows)>reveal){q++;continue}
+      const fr=anim&&motion==='flicker'?Math.floor(tt*fps):0;
+      const wi=Math.floor(hash2(ci*31+fr*7919,seed)*nw),word=words[wi];
+      let wide=Math.max(1,Math.ceil(widths[wi]/cw));
+      if(q>0&&q+wide>cols)break;
+      wide=Math.min(wide,cols-q);
+      if(!pushCell(q,r,ci,word,fs,wide)){q++;continue}
+      q+=wide}}}
+  else for(let r=0;r<rows;r++)for(let q=0;q<cols;q++){const ci=r*cols+q;
     if(reveal<1&&(ci+1)/(cols*rows)>reveal)continue;
     let sq=q,sr=r;
     if(anim&&motion==='scrollx')sq=modn(q+Math.floor(tt*fps),cols);
